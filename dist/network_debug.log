@@ -1,0 +1,16 @@
+2025-12-09 12:47:47,629 - \U0001f517 Connecting to 10.19.193.2:7777
+2025-12-09 12:47:47,629 - Attempt 1/2 (timeout: 20s)
+2025-12-09 12:48:07,629 - Timeout on attempt 1: timed out
+2025-12-09 12:48:09,630 - Attempt 2/2 (timeout: 30s)
+2025-12-09 12:48:30,655 - Timeout on attempt 2: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2025-12-09 12:48:30,656 - Host not responding after 2 attempts
+2025-12-09 12:48:43,717 - \U0001f517 Connecting to 10.19.193.2:7777
+2025-12-09 12:48:43,718 - Attempt 1/2 (timeout: 20s)
+2025-12-09 12:49:03,718 - Timeout on attempt 1: timed out
+2025-12-09 12:49:05,720 - Attempt 2/2 (timeout: 30s)
+2025-12-09 12:49:26,740 - Timeout on attempt 2: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2025-12-09 12:49:26,740 - Host not responding after 2 attempts
+2025-12-09 13:06:53,670 - \U0001f517 Connecting to 10.19.193.2:7777
+2025-12-09 13:06:53,671 - Attempt 1/2 (timeout: 20s)
+2025-12-09 13:07:13,670 - Timeout on attempt 1: timed out
+2025-12-09 13:07:15,671 - Attempt 2/2 (timeout: 30s)
