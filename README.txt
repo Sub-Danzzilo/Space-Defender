@@ -32,6 +32,8 @@ Tembak jatuh semua musuh yang datang
 
 Cegah musuh melewati bagian bawah layar
 
+[UNFINISHED]
+
 Kumpulkan power-up untuk kemampuan spesial
 
 Bertahan selama mungkin dan raih skor tertinggi
