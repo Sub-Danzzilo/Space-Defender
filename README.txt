@@ -32,8 +32,13 @@ Tembak jatuh semua musuh yang datang
 
 Cegah musuh melewati bagian bawah layar
 
+[UNFINISHED]
+
 Kumpulkan power-up untuk kemampuan spesial
 
 Bertahan selama mungkin dan raih skor tertinggi
+<<<<<<< HEAD
 
 [UNFINISHED]
+=======
+>>>>>>> a60cdc43e416a28b475eb873b1d80a95fa2a0e2c
