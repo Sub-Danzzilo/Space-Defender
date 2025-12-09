@@ -35,3 +35,5 @@ Cegah musuh melewati bagian bawah layar
 Kumpulkan power-up untuk kemampuan spesial
 
 Bertahan selama mungkin dan raih skor tertinggi
+
+[UNFINISHED]
