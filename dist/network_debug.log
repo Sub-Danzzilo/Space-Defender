@@ -1,16 +1,90 @@
-2025-12-09 12:47:47,629 - \U0001f517 Connecting to 10.19.193.2:7777
-2025-12-09 12:47:47,629 - Attempt 1/2 (timeout: 20s)
-2025-12-09 12:48:07,629 - Timeout on attempt 1: timed out
-2025-12-09 12:48:09,630 - Attempt 2/2 (timeout: 30s)
-2025-12-09 12:48:30,655 - Timeout on attempt 2: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
-2025-12-09 12:48:30,656 - Host not responding after 2 attempts
-2025-12-09 12:48:43,717 - \U0001f517 Connecting to 10.19.193.2:7777
-2025-12-09 12:48:43,718 - Attempt 1/2 (timeout: 20s)
-2025-12-09 12:49:03,718 - Timeout on attempt 1: timed out
-2025-12-09 12:49:05,720 - Attempt 2/2 (timeout: 30s)
-2025-12-09 12:49:26,740 - Timeout on attempt 2: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
-2025-12-09 12:49:26,740 - Host not responding after 2 attempts
-2025-12-09 13:06:53,670 - \U0001f517 Connecting to 10.19.193.2:7777
-2025-12-09 13:06:53,671 - Attempt 1/2 (timeout: 20s)
-2025-12-09 13:07:13,670 - Timeout on attempt 1: timed out
-2025-12-09 13:07:15,671 - Attempt 2/2 (timeout: 30s)
+2025-12-10 17:55:23,277 - ZeroTier IP refreshed: 10.147.19.47 -> 10.243.98.47
+2025-12-11 01:36:35,830 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 01:36:35,830 - Attempt 1/2 (timeout: 20s)
+2025-12-11 01:36:37,402 - \u2705 CONNECTION SUCCESS! Time: 1.6s
+2025-12-11 02:37:43,804 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 02:37:43,804 - Attempt 1/2 (timeout: 20s)
+2025-12-11 02:37:43,826 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 03:11:06,375 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 03:11:06,376 - Attempt 1/2 (timeout: 20s)
+2025-12-11 03:11:06,406 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 10:17:18,397 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 10:17:18,398 - Attempt 1/2 (timeout: 20s)
+2025-12-11 10:17:19,969 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 10:17:36,396 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 10:17:36,397 - Attempt 1/2 (timeout: 20s)
+2025-12-11 10:17:36,674 - \u2705 CONNECTION SUCCESS! Time: 0.3s
+2025-12-11 10:17:37,476 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 10:17:37,477 - Attempt 1/2 (timeout: 20s)
+2025-12-11 10:17:37,481 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 10:18:05,573 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-12-11 12:40:09,033 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 12:40:09,034 - Attempt 1/2 (timeout: 20s)
+2025-12-11 12:40:09,047 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 12:40:50,871 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 12:40:50,871 - Attempt 1/2 (timeout: 20s)
+2025-12-11 12:40:50,917 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 12:40:54,608 - \U0001f517 CONNECTING to 10.19.193.8:7777
+2025-12-11 12:40:55,520 - Attempt 1/2 (timeout: 20s)
+2025-12-11 12:41:15,520 - \u23f3 Timeout on attempt 1: timed out
+2025-12-11 12:41:17,522 - Attempt 2/2 (timeout: 30s)
+2025-12-11 12:41:54,583 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 12:41:54,583 - Attempt 1/2 (timeout: 20s)
+2025-12-11 12:41:54,607 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 12:48:33,776 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-12-11 13:00:04,367 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 13:00:04,367 - Attempt 1/2 (timeout: 20s)
+2025-12-11 19:24:02,355 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 19:24:02,355 - Attempt 1/2 (timeout: 20s)
+2025-12-11 19:24:03,928 - \u2705 CONNECTION SUCCESS! Time: 1.6s
+2025-12-11 19:24:03,928 - Event sent: client_connected
+2025-12-11 19:24:33,359 - Event sent: client_cancelled
+2025-12-11 19:24:38,921 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 19:24:38,921 - Attempt 1/2 (timeout: 20s)
+2025-12-11 19:24:38,931 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 19:24:38,932 - Event sent: client_connected
+2025-12-11 19:25:16,040 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-12-11 19:27:19,670 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 19:27:19,670 - Attempt 1/2 (timeout: 20s)
+2025-12-11 19:27:19,695 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 19:27:19,695 - Event sent: client_connected
+2025-12-11 19:27:40,385 - Event sent: client_cancelled
+2025-12-11 19:30:20,355 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 19:30:20,355 - Attempt 1/2 (timeout: 20s)
+2025-12-11 19:30:20,380 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 19:30:20,380 - Event sent: client_connected
+2025-12-11 19:30:24,228 - Event sent: client_cancelled
+2025-12-11 23:11:11,077 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 23:11:11,636 - Attempt 1/2 (timeout: 20s)
+2025-12-11 23:11:11,891 - \u2705 CONNECTION SUCCESS! Time: 0.3s
+2025-12-11 23:11:11,892 - Event sent: client_connected
+2025-12-11 23:15:19,211 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-12-11 23:15:51,056 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 23:15:51,056 - Attempt 1/2 (timeout: 20s)
+2025-12-11 23:15:51,094 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 23:15:51,095 - Event sent: client_connected
+2025-12-11 23:15:52,597 - Event sent: client_cancelled
+2025-12-11 23:16:41,645 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 23:16:41,645 - Attempt 1/2 (timeout: 20s)
+2025-12-11 23:16:41,659 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 23:16:41,659 - Event sent: client_connected
+2025-12-11 23:16:44,002 - Event sent: client_cancelled
+2025-12-11 23:16:45,481 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-11 23:16:45,482 - Attempt 1/2 (timeout: 20s)
+2025-12-11 23:16:45,496 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-11 23:16:45,496 - Event sent: client_connected
+2025-12-12 13:09:11,853 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-12 13:09:13,404 - Attempt 1/2 (timeout: 5s)
+2025-12-12 13:09:13,433 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-12 13:09:13,433 - Event sent: client_connected
+2025-12-12 13:13:06,150 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-12-12 13:13:21,825 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-12 13:13:21,825 - Attempt 1/2 (timeout: 5s)
+2025-12-12 13:13:21,855 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-12 13:13:21,856 - Event sent: client_connected
+2025-12-12 13:14:36,409 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-12-12 18:19:25,795 - \U0001f517 CONNECTING to 10.19.193.2:7777
+2025-12-12 18:19:27,358 - Attempt 1/2 (timeout: 5s)
+2025-12-12 18:19:27,387 - \u2705 CONNECTION SUCCESS! Time: 0.0s
+2025-12-12 18:19:27,388 - Event sent: client_connected
+2025-12-12 18:20:02,077 - Error receiving data: [WinError 10054] An existing connection was forcibly closed by the remote host

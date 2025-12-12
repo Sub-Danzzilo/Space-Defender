@@ -6,7 +6,6 @@ import subprocess
 import platform
 import logging
 import json
-import psutil
 import traceback
 
 class NetworkManager:
@@ -190,7 +189,7 @@ class NetworkManager:
         except Exception as e:
             self.error_message = f"Error starting host: {str(e)}"
             return False
-    
+
     def update_host(self):
         """Update host state - check for incoming connections"""
         if self.is_host and not self.connected:
@@ -198,11 +197,23 @@ class NetworkManager:
                 self.client_socket, addr = self.socket.accept()
                 self.connected = True
                 self.status_message = f"Player connected: {addr[0]}"
+                
+                # PERBAIKAN: Set socket ke non-blocking untuk game
+                self.client_socket.setblocking(False)
+                
+                # PERBAIKAN: Juga update error_message agar kosong
+                self.error_message = ""
+                
+                # Log connection
+                print(f"✅ Host: Player connected from {addr[0]}")
+                logging.info(f"Host: Player connected from {addr[0]}")
+                
                 return True
             except socket.timeout:
                 pass  # No connection yet
             except Exception as e:
                 self.error_message = f"Connection error: {str(e)}"
+                logging.error(f"Host connection error: {e}")
         return False
     
     def connect_to_host(self, host_ip):
@@ -233,7 +244,7 @@ class NetworkManager:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 
                 # Set timeout berdasarkan attempt
-                timeout = 20 if attempt == 0 else 30
+                timeout = 5 if attempt == 0 else 5
                 sock.settimeout(timeout)
                 
                 logging.info(f"Attempt {attempt + 1}/{max_retries} (timeout: {timeout}s)")
@@ -309,39 +320,125 @@ class NetworkManager:
         return False
     
     def send_data(self, data):
-        """Send data to client/host"""
+        """Send data ke client/host - IMPROVED"""
         if self.connected and self.socket:
             try:
-                # Simple protocol: send length first, then data
                 data_str = str(data)
-                length = len(data_str)
-                self.socket.sendall(f"{length:10d}".encode() + data_str.encode())
+                data_bytes = data_str.encode('utf-8')
+                length = len(data_bytes)
+                
+                # Format: [LENGTH(10 bytes)][DATA]
+                self.socket.sendall(f"{length:10d}".encode() + data_bytes)
                 return True
-            except:
+            except Exception as e:
+                logging.error(f"Error sending data: {e}")
                 self.connected = False
-                self.error_message = "Connection lost"
                 return False
+        return False
     
     def receive_data(self):
-        """Receive data from client/host"""
+        """Receive data dari client/host - IMPROVED"""
         if self.connected and self.socket:
             try:
-                # Receive length first
+                # Receive length header
                 length_data = self.socket.recv(10)
                 if not length_data:
                     self.connected = False
-                    self.error_message = "Connection closed by peer"
                     return None
                 
-                length = int(length_data.decode().strip())
-                data = self.socket.recv(length).decode()
-                return data
-            except:
+                try:
+                    length = int(length_data.decode().strip())
+                except ValueError:
+                    logging.warning(f"Invalid length header: {length_data}")
+                    return None
+                
+                # Receive all data (dengan retry untuk partial data)
+                data = b""
+                while len(data) < length:
+                    chunk = self.socket.recv(min(1024, length - len(data)))
+                    if not chunk:
+                        self.connected = False
+                        return None
+                    data += chunk
+                
+                return data.decode('utf-8')
+                
+            except socket.timeout:
+                pass  # Normal
+            except BlockingIOError:
+                pass  # Data belum ready
+            except Exception as e:
+                logging.error(f"Error receiving data: {e}")
                 self.connected = False
-                self.error_message = "Connection lost"
                 return None
-        return None
     
+    def send_player_position(self, player_id, x, y):
+        """Kirim posisi player ke remote - FIXED"""
+        if self.connected and self.socket:
+            try:
+                # Gunakan format yang sama dengan send_data()
+                data = f"POS|{player_id}|{x}|{y}"
+                data_bytes = data.encode('utf-8')
+                length = len(data_bytes)
+                
+                # Kirim: [LENGTH(10 bytes)][DATA]
+                self.socket.sendall(f"{length:10d}".encode() + data_bytes)
+                return True
+            except Exception as e:
+                logging.error(f"Error sending position: {e}")
+                self.connected = False
+                return False
+        return False
+
+    def receive_player_position(self):
+        """Terima posisi player dari remote - FIXED"""
+        if self.connected and self.socket:
+            try:
+                # Receive length header (10 bytes)
+                length_data = self.socket.recv(10)
+                if not length_data:
+                    self.connected = False
+                    return None
+                
+                try:
+                    length = int(length_data.decode().strip())
+                except ValueError:
+                    logging.warning(f"Invalid length header: {length_data}")
+                    return None
+                
+                # Receive actual data
+                data = b""
+                while len(data) < length:
+                    chunk = self.socket.recv(min(1024, length - len(data)))
+                    if not chunk:
+                        self.connected = False
+                        return None
+                    data += chunk
+                
+                data_str = data.decode('utf-8')
+                
+                if data_str.startswith("POS|"):
+                    parts = data_str.split("|")
+                    if len(parts) == 4:
+                        try:
+                            player_id = int(parts[1])
+                            x = int(float(parts[2]))
+                            y = int(float(parts[3]))
+                            return (player_id, x, y)
+                        except ValueError:
+                            logging.warning(f"Invalid position data: {data_str}")
+                            return None
+            except socket.timeout:
+                pass  # Normal untuk non-blocking socket
+            except BlockingIOError:
+                pass  # Data belum ready
+            except Exception as e:
+                logging.error(f"Error receiving position: {e}")
+                self.connected = False
+                return None
+    
+        return None
+
     def disconnect(self):
         """Disconnect from network"""
         self.connected = False
@@ -356,6 +453,13 @@ class NetworkManager:
             except:
                 pass
         self.status_message = "Disconnected"
+        
+        # PERBAIKAN: Reset last_event juga
+        if hasattr(self, 'last_event'):
+            self.last_event = None
+        
+        # PERBAIKAN: Reset error message
+        self.error_message = ""
     
     def get_connection_info(self):
         """Get connection info for UI display - IMPROVED"""
@@ -417,15 +521,32 @@ class NetworkManager:
         return info_lines
     
     def get_error_message(self):
-        """Get detailed error message for display"""
+        """Get detailed error message for display - IMPROVED VERSION"""
         if self.error_message:
-            if "timeout" in self.error_message.lower():
-                return "Timeout - Host not responding"
-            elif "refused" in self.error_message.lower():
-                return "Connection refused - Check IP"
-            elif "failed" in self.error_message.lower():
-                return "Connection failed"
+            # PERBAIKAN: Kategorikan error message
+            error_lower = self.error_message.lower()
+            
+            if "host cancelled" in error_lower:
+                return "Host cancelled the game"
+            elif "timeout" in error_lower or "not responding" in error_lower:
+                return "Host not responding"
+            elif "connection refused" in error_lower:
+                return "Connection refused - Check IP and firewall"
+            elif "invalid ip" in error_lower:
+                return "Invalid IP address"
+            elif "failed" in error_lower or "error" in error_lower:
+                # Coba ekstrak informasi yang lebih spesifik
+                if "socket" in error_lower or "network" in error_lower:
+                    return "Network connection failed"
+                elif "address" in error_lower:
+                    return "Invalid network address"
+                else:
+                    # Potong error message jika terlalu panjang
+                    if len(self.error_message) > 50:
+                        return self.error_message[:47] + "..."
+                    return self.error_message
             else:
+                # Fallback
                 return self.error_message
         return ""
     
@@ -454,31 +575,87 @@ class NetworkManager:
                 pass
         return None
     
-    def send_player_position(self, player_id, x, y):
-        """Kirim posisi player ke remote"""
-        if self.connected and self.socket:
-            try:
-                data = f"POS|{player_id}|{x}|{y}"
-                self.socket.sendall(data.encode('utf-8'))
+    def send_event(self, event_type, payload=None):
+        """Kirim event JSON kecil ke remote (type + payload)"""
+        try:
+            import json
+            data = {'type': event_type, 'payload': payload or {}}
+            data_str = json.dumps(data)
+            
+            # PERBAIKAN: Tambahkan newline sebagai delimiter
+            data_str += '\n'
+            
+            # Kirim dengan try-catch
+            if self.connected and self.socket:
+                self.socket.sendall(data_str.encode('utf-8'))
+                logging.debug(f"Event sent: {event_type}")
                 return True
-            except:
-                return False
+        except Exception as e:
+            logging.error(f"send_event error: {e}")
+            self.connected = False
         return False
 
-    def receive_player_position(self):
-        """Terima posisi player dari remote"""
-        if self.connected and self.socket:
+    def receive_event(self):
+        """
+        Receive high-level event (JSON) if available.
+        Returns dict {'type':..., 'payload':...} or None.
+        Sets self.last_event for convenience.
+        """
+        try:
+            import json
+            data = self.receive_data()
+            if not data:
+                return None
             try:
-                # ❌ JANGAN set non-blocking setiap kali dipanggil!
-                # self.socket.setblocking(False)  # Ini sudah set di connect_to_host
-                data = self.socket.recv(1024).decode('utf-8')
-                if data.startswith("POS|"):
-                    parts = data.split("|")
-                    if len(parts) == 4:
-                        player_id = int(parts[1])
-                        x = int(float(parts[2]))
-                        y = int(float(parts[3]))
-                        return (player_id, x, y)
-            except:
-                pass
+                parsed = json.loads(data)
+                # store last event for UI layers that inspect network_manager
+                self.last_event = parsed
+                return parsed
+            except Exception as e:
+                logging.warning(f"Invalid JSON event received: {e} -> {data}")
+                return None
+        except Exception as e:
+            logging.error(f"receive_event error: {e}")
+            return None
+        
+    def send_event_safe(self, event_type, payload=None):
+        """Kirim event dengan error handling lebih baik"""
+        try:
+            import json
+            data = {'type': event_type, 'payload': payload or {}}
+            data_str = json.dumps(data)
+            # Tambahkan newline untuk memudahkan parsing
+            data_str += '\n'
+            self.socket.sendall(data_str.encode('utf-8'))
+            return True
+        except Exception as e:
+            logging.error(f"send_event_safe error: {e}")
+            self.connected = False
+            return False
+
+    def receive_event_safe(self):
+        """Terima event dengan newline sebagai delimiter"""
+        try:
+            import json
+            # Baca sampai newline
+            data = b""
+            while True:
+                chunk = self.socket.recv(1)
+                if not chunk:
+                    self.connected = False
+                    return None
+                if chunk == b'\n':
+                    break
+                data += chunk
+            
+            if data:
+                parsed = json.loads(data.decode('utf-8'))
+                self.last_event = parsed
+                return parsed
+        except socket.timeout:
+            pass
+        except BlockingIOError:
+            pass
+        except Exception as e:
+            logging.error(f"receive_event_safe error: {e}")
         return None

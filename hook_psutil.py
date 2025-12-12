@@ -1,10 +1,10 @@
 # hook-psutil.py
 # Runtime hook untuk psutil di PyInstaller
 
-import os
-import sys
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-# Pastikan psutil bisa menemukan file DLL-nya
-if hasattr(sys, '_MEIPASS'):
-    # Saat dijalankan dari PyInstaller
-    os.environ['PATH'] = sys._MEIPASS + os.pathsep + os.environ['PATH']
+# Collect semua submodule psutil
+hiddenimports = collect_submodules('psutil')
+
+# Collect data files jika ada
+datas = collect_data_files('psutil')

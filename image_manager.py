@@ -89,7 +89,15 @@ class ImageManager:
             print("Creating shield sprite...")
             self.images['shield'] = self.create_shield_image()
             self.assets_created += 1
-        
+
+        # ===== PAUSE ICON =====
+        if self.load_image('pause', 'assets/images/pause.png'):
+            pass
+        else:
+            print("Creating pause icon sprite...")
+            self.images['pause'] = self.create_pause_image()
+            self.assets_created += 1
+
         # ===== ENEMIES =====
         enemy_images = [
             ('enemy', 'assets/images/enemy.png'),
@@ -314,6 +322,24 @@ class ImageManager:
         # Efek kilau
         pygame.draw.circle(surface, (200, 230, 255, 180), (25, 25), 8)
         
+        return surface
+
+    def create_pause_image(self):
+        """Generate simple pause icon (circle + dua batang)"""
+        size = 40
+        surface = pygame.Surface((size, size), pygame.SRCALPHA)
+        # Circular background
+        pygame.draw.circle(surface, (30, 30, 30, 220), (size//2, size//2), size//2)
+        pygame.draw.circle(surface, (255, 255, 255, 30), (size//2, size//2), size//2, 2)
+        # Two pause bars
+        bar_w = 6
+        bar_h = 20
+        gap = 6
+        left_x = (size//2) - gap - bar_w
+        right_x = (size//2) + gap
+        top_y = (size//2) - (bar_h//2)
+        pygame.draw.rect(surface, (220, 220, 220), (left_x, top_y, bar_w, bar_h), border_radius=2)
+        pygame.draw.rect(surface, (220, 220, 220), (right_x, top_y, bar_w, bar_h), border_radius=2)
         return surface
     
     def create_star_image(self):

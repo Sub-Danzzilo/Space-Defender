@@ -3,7 +3,7 @@ import os
 import sys
 
 def build_exe():
-    print("🔨 Building Space Defender (Single EXE)...")
+    print("🔨 Building Space Defender...")
     
     # Dapatkan path absolut
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -104,11 +104,27 @@ def build_exe():
         "pygame", "pygame._view", "pygame.mixer", "pygame.mixer_music",
         "socket", "threading", "json", "logging", "platform", "subprocess",
         "random", "math", "sys", "os", "time", "re", "traceback",
-        "psutil", "psutil._pswindows", "psutil._psutil_windows",
     ]
+    
+    # Tambahkan psutil hanya kalau terinstall (optional)
+    try:
+        __import__("psutil")
+        hidden_imports.append("psutil")
+        print("✅ psutil detected and will be included")
+    except ImportError:
+        print("⚠️ psutil not found — building without it (use fallback)")
     
     for module in hidden_imports:
         pyinstaller_args.append(f"--hidden-import={module}")
+    
+    # Jika ingin gunakan hook_psutil.py yang ada di project/hooks
+    hooks_dir = os.path.join(base_dir, "hooks")
+    if os.path.isdir(hooks_dir):
+        pyinstaller_args.append(f"--additional-hooks-dir={hooks_dir}")
+        print("✅ Using additional hooks dir:", hooks_dir)
+    
+    # Sertakan psutil sebagai hidden import (pastikan terinstall)
+    pyinstaller_args.append("--hidden-import=psutil")
     
     # Debug mode
     if "--debug" in sys.argv:

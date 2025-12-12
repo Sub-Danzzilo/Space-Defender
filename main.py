@@ -4,6 +4,8 @@
 import sys
 import pygame
 import random
+import json
+import threading
 
 # Import dari modul-modul terpisah
 from sound_manager import SoundManager
@@ -23,10 +25,6 @@ from intro_page import IntroPage
 from utils import resource_path
 from network_manager import NetworkManager
 from online_menu_pages import OnlineMenuPages
-
-# ========== INISIALISASI PYGAME ==========
-pygame.init()
-pygame.mixer.init()
 
 # ========== KONSTANTA GAME ==========
 SCREEN_WIDTH = 800
@@ -49,6 +47,15 @@ ORANGE = (255, 165, 0)
 class Game:
     """Kelas utama untuk mengelola seluruh game"""
     def __init__(self):
+        # Penting: inisialisasi pygame hanya ketika dipanggil dari entrypoint,
+        # mencegah child process (multiprocessing spawn) mengeksekusi init lagi.
+        pygame.init()
+        try:
+            pygame.mixer.init()
+        except Exception:
+            # Jika mixer gagal (headless build), lanjut tanpa crash
+            pass
+
         # ===== SETUP WINDOW =====
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption(GAME_TITLE)
@@ -72,6 +79,11 @@ class Game:
         self.game_manager = GameManager(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.ui_renderer = UIRenderer(self.screen, fonts)
 
+        # Inisialisasi pause icon melalui UI Renderer
+        self.ui_renderer.init_pause_icon(self.image_manager)
+        self.pause_icon_rect = self.ui_renderer.get_pause_icon_rect()
+        self.pause_icon_hover = False
+        
         # Set dependencies untuk game_manager
         self.game_manager.sound_manager = self.sound_manager
         self.game_manager.image_manager = self.image_manager
@@ -115,6 +127,8 @@ class Game:
         self.mute_music = False
         self._apply_mute_settings()
 
+        self._init_pause_icon()
+
         # ===== DIVIDER MANAGER =====
         self.divider_manager = DividerManager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
@@ -137,6 +151,9 @@ class Game:
 
         # ===== INTRO PAGE =====
         self.intro_page = IntroPage(self.image_manager, self.sound_manager)
+
+        # ===== ONLINE HOST STATUS TRACKING =====
+        self.last_host_connection_status = False  # <-- TAMBAH INI
         
         # ===== STATE AWAL = INTRO =====
         self.state_manager.set_state(GameState.INTRO)
@@ -145,24 +162,33 @@ class Game:
         # ===== NETWORK MANAGER =====
         self.network_manager = NetworkManager()
         self.online_menu_pages = OnlineMenuPages()
-        
-        # ===== NETWORK AUTO-CHECK =====
-        self._check_network_status()
+
+        # NEW: client/host sync flags & info
+        self.client_waiting_popup = False       # client shows small popup after connect
+        self.remote_host_info = None            # last host_info payload received by client
+        self.client_cancel_alert_time = 0       # host shows 3s alert when client cancels
 
         # ===== INISIALISASI =====
         self.sound_manager.stop_pause_music()
-        self._init_for_intro()
         self._init_button_templates()  # <-- TAMBAHKAN INI DI AKHIR __init__
 
-    def _init_for_intro(self):
-        """Inisialisasi minimal untuk intro tanpa memutar musik"""
-        # Reset flags
-        self.game_over_sound_played = False
-        
-        # Pastikan musik benar-benar stop
-        self.sound_manager.stop_music()
-        pygame.mixer.music.stop()
-        pygame.mixer.music.unload()
+    def _init_pause_icon(self):
+        """Initialize pause icon attributes (called from __init__)."""
+        self.pause_icon = None
+        self.pause_icon_rect = None
+        self.pause_icon_hover = False
+        # Grab icon from image manager if available
+        try:
+            self.pause_icon = self.image_manager.images.get('pause')
+        except Exception:
+            self.pause_icon = None
+        # Default placement (will be adjusted each frame in draw)
+        default_w, default_h = (40, 40)
+        if self.pause_icon:
+            default_w = self.pause_icon.get_width()
+            default_h = self.pause_icon.get_height()
+        # Default x (right margin 10) and default y (singleplayer)
+        self.pause_icon_rect = pygame.Rect(SCREEN_WIDTH - default_w - 10, 90, default_w, default_h)
     
     def init_game(self):
         """Inisialisasi variabel game baru dengan difficulty settings - FIXED"""
@@ -183,88 +209,84 @@ class Game:
             is_online = hasattr(self.network_manager, 'connected') and self.network_manager.connected
             
             if is_online and self.network_manager.is_host:
-                # HOST: Player 1 dengan kontrol default, Player 2 menerima kontrol dari setting
+                print("🖥️ HOST MODE: P1 = Host (controllable), P2 = Client (dummy)")
+                
+                # Player 1 - CONTROLLABLE (Host) - ambil dari control_settings
                 self.player1 = Player(100, SCREEN_HEIGHT - 60, 
                                     self.image_manager.images['player'], player_id=1)
+                
+                # AMBIL SCHEME DARI CONTROL SETTINGS, bukan hardcode
+                control_scheme_p1 = self.state_manager.control_settings.get_control_scheme_for_player(1)
+                self.player1.control_scheme = control_scheme_p1
+                self.player1.health = player_health
+                
+                # Player 2 - DUMMY REMOTE (Client) - otomatis lawan dari P1
                 self.player2 = Player(SCREEN_WIDTH - 150, SCREEN_HEIGHT - 60,
                                     self.image_manager.images['player2'], player_id=2)
-                
-                # TERAPKAN HEALTH DARI DIFFICULTY  <-- PERBAIKAN DI SINI
-                self.player1.health = player_health
+                self.player2.is_dummy = True
+                self.player2.is_remote = True
                 self.player2.health = player_health
                 
-                # TERAPKAN control scheme SESUAI SETTING AWAL
-                control_scheme_p1 = self.state_manager.control_settings.get_control_scheme_for_player(1)
-                control_scheme_p2 = self.state_manager.control_settings.get_control_scheme_for_player(2)
-                
-                self.player1.control_scheme = control_scheme_p1
-                self.player2.control_scheme = control_scheme_p2
-                
-                # ===== PERBAIKAN: Inisialisasi powerup manager dengan player object =====
+                # Powerup managers
                 self.powerup_manager_p1 = PowerUpManager(self.player1)
                 self.powerup_manager_p2 = PowerUpManager(self.player2)
                 
-                # PERBAIKAN: KIRIM control scheme Player 2 ke Client (jika online)
+                # Kirim control scheme player 2 ke client - lawan dari P1
                 try:
+                    control_scheme_p2 = self.state_manager.control_settings.get_control_scheme_for_player(2)
                     self.network_manager.send_control_scheme(control_scheme_p2)
+                    print(f"📤 Host sent control scheme to client: {control_scheme_p2}")
                 except:
-                    print("⚠️ Could not send control scheme (not implemented)")
+                    pass
                 
             elif is_online and not self.network_manager.is_host:
-                # CLIENT: Menerima control scheme dari Host
-                print("🔄 Client: Waiting for control scheme from host...")
+                print("🔗 CLIENT MODE: P1 = Host (dummy), P2 = Client (controllable)")
                 
-                # PERBAIKAN: Tunggu sebentar untuk menerima skema kontrol
+                # Player 1 - DUMMY REMOTE (Host)
+                self.player1 = Player(100, SCREEN_HEIGHT - 60, 
+                                    self.image_manager.images['player'], player_id=1)
+                self.player1.is_dummy = True
+                self.player1.is_remote = True
+                self.player1.health = player_health
+                
+                # Player 2 - CONTROLLABLE (Client)
+                self.player2 = Player(SCREEN_WIDTH - 150, SCREEN_HEIGHT - 60,
+                                    self.image_manager.images['player2'], player_id=2)
+                
+                # Terima control scheme dari host - GUNAKAN yang dikirim host
                 received_scheme = None
-                for _ in range(10):  # Coba 10 kali
+                for _ in range(10):
                     try:
                         received_scheme = self.network_manager.receive_control_scheme()
                         if received_scheme:
                             break
                     except:
                         pass
-                    pygame.time.delay(50)  # Tunggu 50ms
+                    pygame.time.delay(50)
                 
                 if received_scheme:
-                    control_scheme_p2 = received_scheme
-                    print(f"✅ Client received control scheme: {control_scheme_p2}")
+                    self.player2.control_scheme = received_scheme
+                    print(f"✅ Client received control scheme from host: {received_scheme}")
                 else:
-                    # Fallback ke kontrol default (Arrow Keys)
-                    control_scheme_p2 = "arrows"
+                    # Fallback: jika tidak ada dari host, gunakan default
+                    self.player2.control_scheme = "arrows"
                     print("⚠️ Client using default control scheme (arrows)")
                 
-                # Client adalah Player 2 di sisi kanan
-                self.player2 = Player(SCREEN_WIDTH - 150, SCREEN_HEIGHT - 60,
-                                    self.image_manager.images['player2'], player_id=2)
-                self.player2.control_scheme = control_scheme_p2
-                
-                # TERAPKAN HEALTH DARI DIFFICULTY  <-- PERBAIKAN DI SINI
                 self.player2.health = player_health
                 
-                # ===== PERBAIKAN: Inisialisasi powerup manager untuk player2 =====
-                self.powerup_manager_p2 = PowerUpManager(self.player2)
-                
-                # Player 1 adalah dummy (hanya untuk render) - POSISI DARI HOST
-                self.player1 = Player(100, SCREEN_HEIGHT - 60, 
-                                    self.image_manager.images['player'], player_id=1)
-                self.player1.is_dummy = True  # Tidak bisa dikontrol
-                self.player1.is_remote = True  # Posisi akan diupdate dari host
-                
-                # TERAPKAN HEALTH DARI DIFFICULTY UNTUK DUMMY JUGA  <-- PERBAIKAN
-                self.player1.health = player_health
-                
-                # ===== PERBAIKAN: Dummy player tidak perlu powerup manager =====
+                # Powerup managers - HANYA P2 punya powerup manager (P1 dummy)
                 self.powerup_manager_p1 = None
-                
+                self.powerup_manager_p2 = PowerUpManager(self.player2)
+            
             else:
-                # LOCAL MULTIPLAYER (bukan online)
+                # ===== LOCAL MULTIPLAYER (bukan online) =====
                 print("👥 Local Multiplayer: Both players controlled locally")
                 self.player1 = Player(100, SCREEN_HEIGHT - 60, 
                                     self.image_manager.images['player'], player_id=1)
                 self.player2 = Player(SCREEN_WIDTH - 150, SCREEN_HEIGHT - 60,
                                     self.image_manager.images['player2'], player_id=2)
                 
-                # TERAPKAN HEALTH DARI DIFFICULTY  <-- PERBAIKAN DI SINI
+                # TERAPKAN HEALTH DARI DIFFICULTY
                 self.player1.health = player_health
                 self.player2.health = player_health
                 
@@ -275,30 +297,27 @@ class Game:
                 self.player1.control_scheme = control_scheme_p1
                 self.player2.control_scheme = control_scheme_p2
                 
-                # ===== PERBAIKAN: Inisialisasi powerup manager untuk kedua player =====
+                # Inisialisasi powerup manager untuk kedua player
                 self.powerup_manager_p1 = PowerUpManager(self.player1)
                 self.powerup_manager_p2 = PowerUpManager(self.player2)
+        
         else:
             # ===== SINGLEPLAYER =====
             print("👤 Starting Singleplayer game")
-            # Hitung posisi x di tengah layar
             player_width = self.image_manager.images['player'].get_width()
             player_x = (SCREEN_WIDTH // 2) - (player_width // 2)
             
             self.player1 = Player(player_x, SCREEN_HEIGHT - 60, 
                                 self.image_manager.images['player'], player_id=1)
-            self.player2 = None  # Tidak ada player2 di singleplayer
+            self.player2 = None
             
-            # TERAPKAN HEALTH DARI DIFFICULTY  <-- PERBAIKAN DI SINI
             self.player1.health = player_health
             
-            # TERAPKAN control scheme dari settings
             control_scheme_p1 = self.state_manager.control_settings.get_control_scheme_for_player(1)
             self.player1.control_scheme = control_scheme_p1
             
-            # ===== PERBAIKAN: Inisialisasi powerup manager dengan player object, bukan integer =====
-            self.powerup_manager_p1 = PowerUpManager(self.player1)  # Player 1 powerup manager
-            self.powerup_manager_p2 = None  # Player 2 tidak ada
+            self.powerup_manager_p1 = PowerUpManager(self.player1)
+            self.powerup_manager_p2 = None
         
         # ===== KOSONGKAN SPRITE GROUPS =====
         self.bullets_p1.empty()
@@ -317,18 +336,16 @@ class Game:
         self.difficulty_level = 1
         self.wave_time = 0
         
-        # Reset game over flag
         self.game_over_sound_played = False
         
-        # Clear enemies passed tracker
         if hasattr(self.game_manager, '_enemies_passed'):
             self.game_manager._enemies_passed.clear()
 
         # PERBAIKAN: Reset posisi musik saat mulai game baru
         self.current_music_mode = "game"
-        self.sound_manager.stop_music()  # Hentikan semua musik
-        self.sound_manager.music_position = 0  # Reset posisi
-        self.sound_manager.play_game_music(0)  # Mulai dari awal
+        self.sound_manager.stop_music()
+        self.sound_manager.music_position = 0
+        self.sound_manager.play_game_music(0)
         print("🔄 Game initialized with game music")
         print(f"🎯 Difficulty: {self.game_manager.difficulty_manager.difficulty_mode.upper()}")
         print(f"❤️  Player Health: {player_health}")
@@ -351,7 +368,7 @@ class Game:
             # Volume musik akan diatur oleh SoundManager sendiri
 
     def handle_events(self):
-        """Handle semua event input dari user - FIXED TEXT INPUT"""
+        """Handle semua event input dari user - FIXED dengan proteksi popup"""
         mouse_pos = pygame.mouse.get_pos()
         events = pygame.event.get()
 
@@ -364,6 +381,20 @@ class Game:
                     self.intro_page.skip_intro()
             return
         
+        # ===== PERBAIKAN: JIKA CLIENT DALAM POPUP, BLOKIR SEMUA EVENT LAIN =====
+        if (self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING and 
+            self.client_waiting_popup):
+            print("🛡️ Popup aktif - hanya proses klik pada popup")
+            # Hanya proses event yang terkait popup
+            for event in events:
+                if event.type == pygame.QUIT:
+                    self.running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    # Handle click langsung ke method popup
+                    self.handle_join_connecting_click(mouse_pos)
+                    return
+            return
+        
         # ===== HANDLE SEMUA EVENT DENGAN BENAR =====
         for event in events:
             if event.type == pygame.QUIT:
@@ -371,6 +402,11 @@ class Game:
             
             # ===== MOUSE CLICK =====
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # PERBAIKAN: Skip jika dalam popup waiting (sudah ditangani di atas)
+                if (self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING and 
+                    self.client_waiting_popup):
+                    continue
+                
                 # Handle control selector click
                 if self.state_manager.state == GameState.GAME_MODE_SELECT:
                     if self.menu_pages.handle_control_selector_click(mouse_pos, self.state_manager.control_settings):
@@ -378,14 +414,40 @@ class Game:
                 
                 # Handle input box untuk online join
                 if self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING:
-                    input_rect = pygame.Rect(100, 170, 400, 40)  # PERBAIKAN: Koordinat yang benar
-                    if input_rect.collidepoint(mouse_pos):
-                        self.online_menu_pages.input_active = True
-                        print("🔤 Text input activated")
-                    else:
-                        self.online_menu_pages.input_active = False
-                        print("🔤 Text input deactivated")
+                    # PERBAIKAN: Jangan proses jika dalam popup
+                    if not self.client_waiting_popup:
+                        input_rect = pygame.Rect(100, 170, 400, 40)
+                        if input_rect.collidepoint(mouse_pos):
+                            self.online_menu_pages.input_active = True
+                            print("🔤 Text input activated")
+                        else:
+                            self.online_menu_pages.input_active = False
+                            print("🔤 Text input deactivated")
                 
+                # ===== Pause icon click =====
+                if (self.state_manager.state == GameState.PLAYING and 
+                    self.ui_renderer.get_pause_icon_rect() and 
+                    self.ui_renderer.get_pause_icon_rect().collidepoint(mouse_pos)):
+                    # toggle pause
+                    self.pause_manager.toggle_pause()
+                    if self.pause_manager.is_paused:
+                        try:
+                            self.sound_manager.play_pause_music()
+                        except Exception:
+                            pass
+                        self.current_music_mode = "pause"
+                    else:
+                        try:
+                            self.sound_manager.stop_pause_music()
+                        except Exception:
+                            pass
+                        self.current_music_mode = "game"
+                        try:
+                            self.sound_manager.play_game_music()
+                        except Exception:
+                            pass
+                    continue
+
                 # Panggil handler click yang sesuai
                 self.handle_all_clicks(mouse_pos, event)
             
@@ -394,9 +456,10 @@ class Game:
                 if event.key == pygame.K_ESCAPE:
                     self.handle_escape_key()
                 
-                # PERBAIKAN: Handle keyboard input untuk IP address - lebih robust
+                # PERBAIKAN: Handle keyboard input untuk IP address
                 if (self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING and 
-                    self.online_menu_pages.input_active):
+                    self.online_menu_pages.input_active and
+                    not self.client_waiting_popup):  # PERBAIKAN: Jangan proses jika dalam popup
                     
                     if event.key == pygame.K_BACKSPACE:
                         self.online_menu_pages.input_text = self.online_menu_pages.input_text[:-1]
@@ -406,7 +469,13 @@ class Game:
                         # Try connect ketika tekan Enter
                         if self.online_menu_pages.input_text:
                             print(f"↩️ Enter pressed, connecting to {self.online_menu_pages.input_text}")
-                            self.network_manager.connect_to_host(self.online_menu_pages.input_text)
+                            threading.Thread(
+                                target=self.network_manager.connect_to_host,
+                                args=(self.online_menu_pages.input_text,),
+                                daemon=True
+                            ).start()
+
+                            self.client_waiting_popup = True  # biar muncul popup "Connecting..."
                     
                     elif event.key == pygame.K_ESCAPE:
                         # ESC untuk keluar dari input mode
@@ -496,8 +565,29 @@ class Game:
             if self.pause_manager.is_paused:
                 if not self.pause_manager.countdown_active:
                     self.pause_manager.start_countdown()
+                    # Hapus tombol pause karena mulai countdown
+                    self.current_buttons.clear()
             else:
-                self.pause_manager.toggle_pause()
+                # Toggle pause dan dapatkan status baru
+                is_now_paused = self.pause_manager.toggle_pause()
+                if is_now_paused:
+                    self.load_buttons_for_state()
+                    print(f"⎋ ESC: Game paused, loaded buttons")
+        
+        # PERBAIKAN: Tambahkan handling untuk ONLINE_HOST_WAITING
+        elif self.state_manager.state == GameState.ONLINE_HOST_WAITING:
+            print("⎋ ESC: Leaving host waiting screen")
+            # Kirim event ke client jika masih connected
+            if self.network_manager.connected:
+                try:
+                    self.network_manager.send_event('host_cancelled', {})
+                except:
+                    pass
+            self.network_manager.disconnect()
+            self.state_manager.set_state(GameState.ONLINE_HOST_JOIN)
+            self.current_buttons.clear()
+            self.client_cancel_alert_time = 0
+        
         else:
             if self.state_manager.handle_escape_key(self.sound_manager, self):
                 self.current_buttons.clear()
@@ -512,30 +602,79 @@ class Game:
     
     def handle_mouse_click(self, mouse_pos):
         """Handle mouse click event - PERBAIKAN PAUSE MUSIC"""
-        
+        # ===== Pause icon click =====
+        if (self.state_manager.state == GameState.PLAYING and 
+            self.ui_renderer.get_pause_icon_rect() and 
+            self.ui_renderer.get_pause_icon_rect().collidepoint(mouse_pos)):
+            
+            print("⏸️ Pause icon clicked")
+            # toggle pause dan dapatkan status baru
+            is_now_paused = self.pause_manager.toggle_pause()
+            
+            # PERBAIKAN: Load tombol pause jika game menjadi paused
+            if is_now_paused:
+                self.load_buttons_for_state()
+                print(f"🔄 Loaded pause buttons: {list(self.current_buttons.keys())}")
+            else:
+                # Jika game menjadi unpaused, hapus tombol
+                self.current_buttons.clear()
+
         # ===== HANDLE PAUSE BUTTONS =====
         if self.pause_manager.is_paused and not self.pause_manager.countdown_active:
             if 'resume' in self.current_buttons and self.current_buttons['resume'].is_clicked(mouse_pos):
                 self.pause_manager.start_countdown()
                 return
-            
+
             if 'quit_pause' in self.current_buttons and self.current_buttons['quit_pause'].is_clicked(mouse_pos):
                 print("🏠 Returning to menu from pause")
-                
-                # PERBAIKAN: Hentikan pause music sebelum kembali ke menu
+                # If host, notify client to exit too
+                if self.network_manager and self.network_manager.connected and self.network_manager.is_host:
+                    try:
+                        self.network_manager.send_event('exit_game', {})
+                    except:
+                        pass
+
+                # stop pause music and return to menu
                 self.sound_manager.stop_pause_music()
                 self.pause_manager.is_paused = False
                 self.pause_manager.countdown_active = False
-                
                 self.state_manager.set_state(GameState.MENU)
                 self.state_manager.set_menu_state("main")
                 self.current_buttons.clear()
-                
-                # PERBAIKAN: Mainkan menu music dengan benar
-                self.current_music_mode = "menu"
-                self.sound_manager.stop_music()  # Hentikan game music
                 self.sound_manager.play_menu_music()
+                self.current_music_mode = "menu"
                 return
+
+        # Toggle pause via pause icon (only host can control pause)
+        if (self.state_manager.state == GameState.PLAYING and 
+            self.ui_renderer.get_pause_icon_rect() and 
+            self.ui_renderer.get_pause_icon_rect().collidepoint(mouse_pos)):
+            print("⏸️ Pause icon clicked")
+            # toggle pause
+            self.pause_manager.toggle_pause()
+            
+            # PERBAIKAN: Load tombol pause setelah toggle
+            if self.pause_manager.is_paused:
+                self.load_buttons_for_state()
+                print(f"🔄 Loaded pause buttons: {list(self.current_buttons.keys())}")
+            # only host can control pause/resume in online multiplayer
+            if self.state_manager.is_multiplayer and self.network_manager.connected:
+                if not self.network_manager.is_host:
+                    # client cannot toggle pause
+                    return
+            # toggle normally
+            prev = self.pause_manager.is_paused
+            self.pause_manager.toggle_pause()
+            # notify remote
+            if self.network_manager and self.network_manager.connected and self.network_manager.is_host:
+                try:
+                    if self.pause_manager.is_paused:
+                        self.network_manager.send_event('pause', {})
+                    else:
+                        self.network_manager.send_event('resume', {})
+                except:
+                    pass
+            return
     
     def handle_menu_click(self, mouse_pos):
         """Handle click di main menu"""
@@ -544,18 +683,15 @@ class Game:
                 self.state_manager.set_state(GameState.GAME_MODE_SELECT)
                 self.load_buttons_for_state()  # Load tombol baru
                 return
-            
             if 'help' in self.current_buttons and self.current_buttons['help'].is_clicked(mouse_pos):
                 self.state_manager.set_menu_state("help")
                 self.load_buttons_for_state()
                 return
-            
             if 'settings' in self.current_buttons and self.current_buttons['settings'].is_clicked(mouse_pos):
                 self.state_manager.set_menu_state("settings")
                 self.menu_pages.update_slider_values(self.sound_manager)
                 self.load_buttons_for_state()
                 return
-            
             if 'quit' in self.current_buttons and self.current_buttons['quit'].is_clicked(mouse_pos):
                 self.running = False
                 return
@@ -617,7 +753,7 @@ class Game:
             return
     
     def handle_game_over_click(self, mouse_pos):
-        """Handle click di game over screen - FIXED MUSIC"""
+        """Handle click di game over screen - FIXED BUTTON LOADING"""
         if 'restart' in self.current_buttons and self.current_buttons['restart'].is_clicked(mouse_pos):
             print("🔄 Restarting game...")
             self.state_manager.set_state(GameState.PLAYING)
@@ -693,91 +829,164 @@ class Game:
         print("❌ No button clicked in host/join selection")
 
     def handle_host_waiting_click(self, mouse_pos):
-        """Handle click di host waiting screen"""
+        """Handle click di host waiting screen - DIPERBAIKI"""
         print(f"🔍 Checking host waiting buttons at {mouse_pos}")
         
-        # Check expand/collapse instructions area
-        # Area header instructions: Rect(20, instruct_y, SCREEN_WIDTH - 40, 40)
-        instruct_y = 90 + 70  # ip_y + 70 = 160
-        instruct_header = pygame.Rect(20, instruct_y, SCREEN_WIDTH - 40, 40)
+        # Cek alert time (jika dalam 3 detik, ignore click di area alert)
+        if self.client_cancel_alert_time > 0:
+            current_time = pygame.time.get_ticks()
+            if current_time - self.client_cancel_alert_time < 3000:
+                # Abaikan klik di area alert
+                alert_rect = pygame.Rect(50, 350, 700, 40)
+                if alert_rect.collidepoint(mouse_pos):
+                    return
         
-        if instruct_header.collidepoint(mouse_pos):
-            print("📖 Toggling instructions")
-            self.online_menu_pages.instructions_expanded = not getattr(self.online_menu_pages, 'instructions_expanded', False)
-            return
+        # ===== PERBAIKAN: GUNAKAN TOMBOL YANG SUDAH ADA DI CURRENT_BUTTONS =====
         
-        # Check refresh IP button
-        if 'refresh_ip' in self.current_buttons and self.current_buttons['refresh_ip'].is_clicked(mouse_pos):
-            print("🔄 Refreshing ZeroTier IP...")
-            self.network_manager.refresh_zerotier_ip()
-            return
+        # Tombol refresh ip (hanya jika tidak ada client)
+        if not self.network_manager.connected:
+            if 'refresh_ip' in self.current_buttons and self.current_buttons['refresh_ip'].is_clicked(mouse_pos):
+                print("🔄 Host: Refreshing ZeroTier IP...")
+                self.network_manager.refresh_zerotier_ip()
+                return
         
-        # Check other buttons
+        # Tombol start online game (hanya jika client connected)
         if self.network_manager.connected:
             if 'start_online_game' in self.current_buttons and self.current_buttons['start_online_game'].is_clicked(mouse_pos):
-                print("🎮 Starting Online Multiplayer Game as Host")
-                self.state_manager.set_multiplayer(True)
-                self.state_manager.set_state(GameState.PLAYING)
-                self.sound_manager.stop_music()
-                self.init_game()
-                self.current_buttons.clear()
-                return
-
+                print("🎮 Host: START ONLINE GAME pressed")
+                # Kirim sinyal start ke client
+                try:
+                    # Kirim host_info lagi untuk memastikan
+                    self.sync_host_info_to_client()
+                    # Kirim event start_game
+                    self.network_manager.send_event('start_game', {})
+                    print("📤 Sent start_game event to client")
+                    
+                    # PERBAIKAN: Otomatis mulai game di host juga
+                    print("🔄 Host: Starting game locally too")
+                    self.state_manager.set_multiplayer(True)
+                    self.sound_manager.stop_music()
+                    self.init_game()
+                    self.current_buttons.clear()
+                    return
+                    
+                except Exception as e:
+                    print(f"❌ Error sending start event: {e}")
+        
+        # PERBAIKAN: Ubah 'cancel_host' menjadi 'back_host' sesuai dengan template
         if 'cancel_host' in self.current_buttons and self.current_buttons['cancel_host'].is_clicked(mouse_pos):
-            print("❌ Cancelling host...")
+            print("↩️ Returning from host waiting")
+            # Kirim event ke client jika masih connected
+            if self.network_manager.connected:
+                try:
+                    self.network_manager.send_event('host_cancelled', {})
+                except:
+                    pass
             self.network_manager.disconnect()
             self.state_manager.set_state(GameState.ONLINE_HOST_JOIN)
             self.current_buttons.clear()
+            self.client_cancel_alert_time = 0
             return
-        
-        print("❌ No button clicked in host waiting screen")
 
     def handle_join_connecting_click(self, mouse_pos):
-        """Handle click di join connecting screen - DIPERBAIKI"""
+        """Handle click di join connecting screen - DIPERBAIKI dengan blokir klik saat popup"""
         print(f"🔍 Checking join connecting buttons at {mouse_pos}")
-        
-        if 'connect_to_host' in self.current_buttons and self.current_buttons['connect_to_host'].is_clicked(mouse_pos):
-            print("✅ CONNECT TO HOST button clicked!")
-            
-            if not self.online_menu_pages.input_text:
-                self.online_menu_pages.error_message = "Please enter host IP address"
-                self.online_menu_pages.error_timestamp = pygame.time.get_ticks()
-                return
-            
-            host_ip = self.online_menu_pages.input_text.strip()
-            print(f"🔗 Attempting to connect to {host_ip}:{self.network_manager.port}")
-            
-            # Validasi IP
-            if not self._validate_ip(host_ip):
-                self.online_menu_pages.error_message = "Invalid IP format (e.g., 192.168.1.100)"
-                self.online_menu_pages.error_timestamp = pygame.time.get_ticks()
-                return
-            
-            # Coba koneksi dengan timeout feedback
-            self.online_menu_pages.error_message = ""
-            
-            # Tampilkan status connecting
-            print(f"🔄 Connecting to {host_ip}...")
-            
-            # Lakukan koneksi
-            if self.network_manager.connect_to_host(host_ip):
-                print("✅ Connected successfully!")
-                self.state_manager.set_multiplayer(True)
-                self.state_manager.set_state(GameState.PLAYING)
-                self.sound_manager.stop_music()
-                self.init_game()
-                self.current_buttons.clear()
-            else:
-                error = self.network_manager.error_message
-                print(f"❌ ERROR: {error}")
-                print(f"Check: IP valid? Port open? Host running?")
 
-        if 'cancel_join' in self.current_buttons and self.current_buttons['cancel_join'].is_clicked(mouse_pos):
-            print("↩️ Cancelling join...")
-            self.network_manager.disconnect()
-            self.state_manager.set_state(GameState.ONLINE_HOST_JOIN)
-            self.current_buttons.clear()
-            return
+        # ===== PERBAIKAN: KALO POPUP AKTIF, CUMA TOMBOL CANCEL YANG BISA DIPENCET =====
+        if self.client_waiting_popup:
+            # Cek jika ada waiting_popup_cancel_rect
+            if hasattr(self, 'waiting_popup_cancel_rect') and self.waiting_popup_cancel_rect.collidepoint(mouse_pos):
+                print("🚫 Client: Cancelling from waiting popup")
+                # Kirim event cancel ke host
+                if self.network_manager.connected:
+                    try:
+                        self.network_manager.send_event('client_cancelled', {})
+                        print("📤 Sent client_cancelled event to host")
+                    except Exception as e:
+                        print(f"❌ Error sending cancel event: {e}")
+                    self.network_manager.disconnect()
+                self.state_manager.set_state(GameState.ONLINE_HOST_JOIN)
+                self.current_buttons.clear()
+                self.client_waiting_popup = False
+                self.remote_host_info = None
+                # PERBAIKAN: Reset error message juga
+                self.online_menu_pages.error_message = ""
+                if hasattr(self, 'waiting_popup_cancel_rect'):
+                    delattr(self, 'waiting_popup_cancel_rect')
+                return
+            else:
+                # Klik di luar tombol cancel popup? ABAIKAN!
+                print("⚠️ Popup aktif - hanya tombol cancel yang bisa dipencet")
+                return  # <-- INI YANG PENTING! JANGAN PROSES TOMBOL LAIN!
+        
+        # ===== HANYA JIKA TIDAK ADA POPUP, PROSES TOMBOL LAIN =====
+        print("🔓 Tidak ada popup - proses tombol normal")
+        
+        # Tombol connect biasa (hanya jika tidak dalam popup)
+        if not self.client_waiting_popup:
+            if 'connect_to_host' in self.current_buttons and self.current_buttons['connect_to_host'].is_clicked(mouse_pos):
+                print("✅ CONNECT TO HOST button clicked!")
+                
+                # PERBAIKAN: Reset error message sebelum connect baru
+                self.online_menu_pages.error_message = ""
+                
+                if not self.online_menu_pages.input_text:
+                    self.online_menu_pages.error_message = "Please enter host IP address"
+                    self.online_menu_pages.error_timestamp = pygame.time.get_ticks()
+                    return
+                
+                host_ip = self.online_menu_pages.input_text.strip()
+                print(f"🔗 Attempting to connect to {host_ip}:{self.network_manager.port}")
+                
+                # Validasi IP
+                if not self._validate_ip(host_ip):
+                    self.online_menu_pages.error_message = "Invalid IP format (e.g., 192.168.1.100)"
+                    self.online_menu_pages.error_timestamp = pygame.time.get_ticks()
+                    return
+                
+                # Lakukan koneksi
+                if self.network_manager.connect_to_host(host_ip):
+                    # Connected sebagai client -> tampilkan popup menunggu
+                    self.client_waiting_popup = True
+                    self.remote_host_info = None
+                    # Minta host info
+                    try:
+                        self.network_manager.send_event('client_connected', {'request': 'host_info'})
+                        print("📤 Sent client_connected event to host")
+                    except Exception as e:
+                        print(f"❌ Error sending connected event: {e}")
+                    # PERBAIKAN: Hapus tombol connect dari current_buttons
+                    if 'connect_to_host' in self.current_buttons:
+                        del self.current_buttons['connect_to_host']
+                    if 'cancel_join' in self.current_buttons:
+                        del self.current_buttons['cancel_join']
+                    return
+                else:
+                    error = self.network_manager.error_message
+                    self.online_menu_pages.error_message = error
+                    self.online_menu_pages.error_timestamp = pygame.time.get_ticks()
+                    print(f"❌ ERROR: {error}")
+        
+        # Tombol cancel biasa (di luar popup)
+        if not self.client_waiting_popup:
+            if 'cancel_join' in self.current_buttons and self.current_buttons['cancel_join'].is_clicked(mouse_pos):
+                print("↩️ Cancelling join...")
+                # Jika sudah connected, kirim cancel event ke host
+                if self.network_manager.connected:
+                    try:
+                        self.network_manager.send_event('client_cancelled', {})
+                    except:
+                        pass
+                    self.network_manager.disconnect()
+                self.state_manager.set_state(GameState.ONLINE_HOST_JOIN)
+                self.current_buttons.clear()
+                self.client_waiting_popup = False
+                self.remote_host_info = None
+                # PERBAIKAN: Reset error message juga
+                self.online_menu_pages.error_message = ""
+                if hasattr(self, 'waiting_popup_cancel_rect'):
+                    delattr(self, 'waiting_popup_cancel_rect')
+                return
         
     def _validate_ip(self, ip):
         """Validate IP address format"""
@@ -799,49 +1008,109 @@ class Game:
         
         # ===== UPDATE NETWORK STATE =====
         if self.state_manager.state == GameState.ONLINE_HOST_WAITING:
-            # Update host untuk menerima koneksi
-            if self.network_manager.update_host():
-                print("✅ Player connected to host")
+            self.network_manager.update_host()  # Cek koneksi baru
+            
+            # PERBAIKAN: Cek apakah status koneksi berubah
+            current_status = self.network_manager.connected
+            if current_status != self.last_host_connection_status:
+                # Status berubah! Update tombol
+                self.last_host_connection_status = current_status
+                self.update_host_waiting_status()
+                print(f"✅ Host connection status changed: {current_status}")
+                
+                # Send host_info immediately so client UI shows difficulty & controls
+                try:
+                    payload = {
+                        'difficulty': self.game_manager.difficulty_manager.difficulty_mode,
+                        'controls': {
+                            'p1': self.state_manager.control_settings.get_control_scheme_for_player(1),
+                            'p2': self.state_manager.control_settings.get_control_scheme_for_player(2)
+                        }
+                    }
+                    self.network_manager.send_event('host_info', payload)
+                    print(f"📤 Host sent host info to client: {payload}")
+                except Exception as e:
+                    print(f"❌ Error sending host info: {e}")
 
-        # ===== NETWORK SYNC UNTUK ONLINE MULTIPLAYER =====
-        if (self.state_manager.state == GameState.PLAYING and 
-            self.state_manager.is_multiplayer and 
-            hasattr(self, 'network_manager') and 
-            self.network_manager.connected):
-            
-            if self.network_manager.is_host:
-                # HOST: Kirim posisi Player 1 (normal) ke Client
-                if self.player1 and not self.player1.is_dummy:
-                    self.network_manager.send_player_position(
-                        1, 
-                        self.player1.rect.x,
-                        self.player1.rect.y
-                    )
+        # ===== NETWORK EVENT HANDLING (both sides) =====
+        try:
+            evt = self.network_manager.receive_event()
+            if evt:
+                etype = evt.get('type')
+                payload = evt.get('payload', {})
                 
-                # HOST: Terima posisi Player 2 (dummy remote) dari Client
-                pos_data = self.network_manager.receive_player_position()
-                if pos_data and len(pos_data) == 3:
-                    player_id, x, y = pos_data
-                    if player_id == 2 and self.player2 and self.player2.is_dummy:
-                        # Update posisi dummy Player 2 dari input client
-                        self.player2.update_remote_position(x, y)
-            
-            else:  # CLIENT
-                # CLIENT: Kirim posisi Player 2 (normal) ke Host
-                if self.player2 and not self.player2.is_dummy:
-                    self.network_manager.send_player_position(
-                        2,
-                        self.player2.rect.x,
-                        self.player2.rect.y
-                    )
+                # CLIENT: receive host_info dan start_game
+                if not self.network_manager.is_host:
+                    if etype == 'host_info':
+                        self.remote_host_info = payload
+                        self.network_manager.last_event = evt
+                        print(f"📥 Client received host info: Difficulty={payload.get('difficulty')}, Controls={payload.get('controls')}")
+                        
+                        # PERBAIKAN: Paksa update UI dengan menyimpan data ke instance
+                        self.remote_host_info = payload
+                    elif etype == 'start_game':
+                        print("🔔 Client: Received START from host, entering game")
+                        self.state_manager.set_multiplayer(True)
+                        self.state_manager.set_state(GameState.PLAYING)
+                        self.sound_manager.stop_music()
+                        self.client_waiting_popup = False
+                        if hasattr(self, 'waiting_popup_cancel_rect'):
+                            delattr(self, 'waiting_popup_cancel_rect')
+                        self.init_game()
+                        self.current_buttons.clear()
+                    elif etype == 'host_cancelled':
+                        print("⚠️ Host cancelled game")
+                        # PERBAIKAN: Jangan pindah state, tetap di JOIN CONNECTING
+                        # Hanya tampilkan pesan error dan reset data
+                        self.client_waiting_popup = False
+                        self.remote_host_info = None
+                        
+                        # PERBAIKAN: Set error message untuk ditampilkan selama 3 detik
+                        self.online_menu_pages.error_message = "Host cancelled the game"
+                        self.online_menu_pages.error_timestamp = pygame.time.get_ticks()
+                        
+                        # PERBAIKAN: Disconnect dari host
+                        self.network_manager.disconnect()
+                        
+                        # PERBAIKAN: Hapus tombol popup jika ada
+                        if hasattr(self, 'waiting_popup_cancel_rect'):
+                            delattr(self, 'waiting_popup_cancel_rect')
                 
-                # CLIENT: Terima posisi Player 1 (dummy remote) dari Host
-                pos_data = self.network_manager.receive_player_position()
-                if pos_data and len(pos_data) == 3:
-                    player_id, x, y = pos_data
-                    if player_id == 1 and self.player1 and self.player1.is_dummy:
-                        # Update posisi dummy Player 1 dari input host
-                        self.player1.update_remote_position(x, y)
+                # HOST: receive client events
+                else:
+                    if etype == 'client_connected':
+                        print("✅ Client connected, sending host info")
+                        self.sync_host_info_to_client()
+                        # PERBAIKAN: Update tombol host untuk munculin START ONLINE GAME
+                        self.update_host_waiting_status()
+                    elif etype == 'client_cancelled':
+                        print("⚠️ Client cancelled connection")
+                        self.client_cancel_alert_time = pygame.time.get_ticks()
+                        self.network_manager.disconnect()
+                        # PERBAIKAN: Update tombol kembali ke Refresh IP
+                        self.update_host_waiting_status()
+                        # PERBAIKAN: Reset host info untuk client yang mungkin masih ada
+                        self.remote_host_info = None
+
+        except Exception as e:
+            print(f"⚠️ Network event error: {e}")
+
+        # PERBAIKAN: Auto-hapus error message setelah 3 detik
+        if (self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING and 
+            self.online_menu_pages.error_message == "Host cancelled the game"):
+            
+            current_time = pygame.time.get_ticks()
+            if current_time - self.online_menu_pages.error_timestamp >= 3000:
+                self.online_menu_pages.error_message = ""
+                print("🔄 Cleared host cancelled error message")
+        
+        # PERBAIKAN: Cursor blink untuk input text
+        if self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING:
+            # Blink cursor setiap 30 frames (0.5 detik pada 60 FPS)
+            if pygame.time.get_ticks() % 1000 < 500:  # Blink setiap 500ms
+                self.online_menu_pages.cursor_visible = True
+            else:
+                self.online_menu_pages.cursor_visible = False
 
         # PERBAIKAN: Cursor blink untuk input text
         if self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING:
@@ -921,8 +1190,40 @@ class Game:
 
     def update_all_buttons_hover(self, mouse_pos):
         """Update hover status untuk semua tombol aktif"""
+        # PERBAIKAN: Jangan update hover untuk state dengan popup aktif
+        if (self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING and 
+            self.client_waiting_popup):
+            return  # Skip hover update saat popup aktif
+        
+        # PERBAIKAN: Update hover untuk semua tombol
         for button in self.current_buttons.values():
             button.update_hover(mouse_pos)
+        
+        # PERBAIKAN: Update pause icon hover
+        if self.state_manager.state == GameState.PLAYING:
+            pause_rect = self.ui_renderer.get_pause_icon_rect()
+            if pause_rect:
+                self.pause_icon_hover = pause_rect.collidepoint(mouse_pos)
+
+    def update_host_waiting_status(self):
+        """Update status host waiting berdasarkan koneksi client"""
+        if self.state_manager.state == GameState.ONLINE_HOST_WAITING:
+            # Clear tombol dulu
+            keys_to_remove = []
+            for key in self.current_buttons.keys():
+                if key in ['refresh_ip', 'start_online_game', 'back_host']:
+                    keys_to_remove.append(key)
+            
+            for key in keys_to_remove:
+                del self.current_buttons[key]
+            
+            # Load tombol yang sesuai
+            if self.network_manager.connected:
+                self._load_buttons_from_template('host_waiting_connected')
+                print("🔄 Host: Loaded connected buttons (START ONLINE GAME + BACK)")
+            else:
+                self._load_buttons_from_template('host_waiting_disconnected')
+                print("🔄 Host: Loaded disconnected buttons (REFRESH IP + BACK)")
 
     def trigger_game_over(self):
         """Trigger game over state dengan sound management"""
@@ -1092,6 +1393,24 @@ class Game:
                 self.trigger_game_over()  # GUNAKAN METHOD INI, bukan set_state langsung
                 return
 
+        # Peluru P1 vs Musuh - HANYA jika powerup_manager_p1 ada
+        if self.powerup_manager_p1:
+            score_gained_p1, killed_p1 = self.game_manager.check_bullet_enemy_collision(
+                1, self.bullets_p1, self.enemies, self.sound_manager,
+                self.image_manager, self.powerup_manager_p1, self.powerups
+            )
+            self.score_p1 += score_gained_p1
+            self.enemies_killed_p1 += killed_p1
+        else:
+            # Untuk client yang player1-nya dummy, tetap perlu check collision
+            # tapi tanpa powerup_manager
+            score_gained_p1, killed_p1 = self.game_manager.check_bullet_enemy_collision(
+                1, self.bullets_p1, self.enemies, self.sound_manager,
+                self.image_manager, None, self.powerups  # Gunakan None untuk powerup_manager
+            )
+            self.score_p1 += score_gained_p1
+            self.enemies_killed_p1 += killed_p1
+
     def handle_powerup_pickups(self):
         """Handle powerup pickups - METHOD BARU - DITAMBAH NULL CHECK"""
         if self.player1 and self.powerup_manager_p1:
@@ -1099,13 +1418,25 @@ class Game:
             for powerup in hit_powerups_p1:
                 self.powerup_manager_p1.activate_powerup(powerup.powerup_type)
                 self.sound_manager.play_sound('powerup')
-        
+                # SYNC: notify remote about powerup used (host authoritative preferred)
+                try:
+                    if self.network_manager and self.network_manager.connected:
+                        # send which player and type
+                        self.network_manager.send_event('powerup_used', {'player_id': 1, 'powerup_type': powerup.powerup_type})
+                except:
+                    pass
+
         if self.player2 and self.powerup_manager_p2:
             hit_powerups_p2 = pygame.sprite.spritecollide(self.player2, self.powerups, True)
             for powerup in hit_powerups_p2:
                 self.powerup_manager_p2.activate_powerup(powerup.powerup_type)
                 if not self.mute_sfx:
                     self.sound_manager.play_sound('powerup')
+                try:
+                    if self.network_manager and self.network_manager.connected:
+                        self.network_manager.send_event('powerup_used', {'player_id': 2, 'powerup_type': powerup.powerup_type})
+                except:
+                    pass
     
     def draw(self):
         """Menggambar semua elemen game - DIPERBARUI dengan state online"""
@@ -1137,15 +1468,22 @@ class Game:
         
         elif self.state_manager.state == GameState.ONLINE_HOST_WAITING:
             self.online_menu_pages.draw_host_waiting(
-            self.screen, 
-            self.network_manager, 
-            self.current_buttons,
-            self.game_manager.difficulty_manager.difficulty_mode,  # difficulty parameter
-            self.state_manager.control_settings  # control settings parameter
-        )
+                self.screen, 
+                self.network_manager, 
+                self.current_buttons,
+                self.game_manager.difficulty_manager.difficulty_mode,
+                self.state_manager.control_settings,
+                self.client_cancel_alert_time  # Parameter baru
+            )
         
         elif self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING:
             self.online_menu_pages.draw_join_connecting(self.screen, self.network_manager, self.current_buttons)
+
+            # Gambar popup waiting jika diperlukan
+            if self.client_waiting_popup:
+                cancel_rect = self.online_menu_pages.draw_waiting_for_host_popup(self.screen)
+                # Simpan rect untuk klik detection
+                self.waiting_popup_cancel_rect = cancel_rect
         
         elif self.state_manager.state == GameState.MENU:
             self._draw_menu()
@@ -1166,13 +1504,31 @@ class Game:
         else:
             self._draw_singleplayer_ui()
         
-        # 3. Gambar pause overlay jika sedang pause
+        # 3. Draw pause icon via UI Renderer
+        mouse_pos = pygame.mouse.get_pos()
+        self.pause_icon_hover = self.ui_renderer.draw_pause_icon(
+            self.screen, 
+            mouse_pos,
+            self.state_manager.is_multiplayer
+        )
+        self.pause_icon_rect = self.ui_renderer.get_pause_icon_rect()
+
+        # 4. Jika sedang pause atau countdown
+        if self.pause_manager.countdown_active:
+            self.pause_manager.draw_countdown(self.screen)
+            return
+
+        # PERBAIKAN: Update hover dan gambar tombol pause
         if self.pause_manager.is_paused:
-            if self.pause_manager.countdown_active:
-                self.pause_manager.draw_countdown(self.screen)
-            else:
-                self.pause_manager.draw_pause_screen(self.screen)
-                self.draw_pause_buttons()
+            # Update hover untuk tombol pause
+            self.update_all_buttons_hover(mouse_pos)
+            
+            # Gambar overlay pause
+            self.pause_manager.draw_pause_screen(self.screen, is_multiplayer=self.state_manager.is_multiplayer)
+            
+            # Gambar tombol pause
+            self.draw_pause_buttons()
+            return
 
     def _draw_all_game_objects(self):
         """Gambar SEMUA game objects (tanpa UI)"""
@@ -1364,6 +1720,9 @@ class Game:
         footer_rect = footer.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 20))
         self.screen.blit(footer, footer_rect)
 
+        if not self.current_buttons:
+            self.load_buttons_for_state()
+
     def _init_button_templates(self):
         """Inisialisasi template tombol untuk semua state"""
         # Main Menu
@@ -1475,6 +1834,34 @@ class Game:
                 'hover_color': (255, 100, 100), 'font_size': 22
             }
         }
+
+        # Host Waiting (ketika client connected) - PERBAIKAN: TAMBAH TOMBOL BACK
+        self.button_templates['host_waiting_connected'] = {
+            'start_online_game': {
+                'x': 50, 'y': 450, 'width': 240, 'height': 60,
+                'text': "START ONLINE GAME", 'color': (0, 200, 0), 'text_color': BLACK,
+                'hover_color': (0, 255, 100)
+            },
+            'back_host': {  # PERBAIKAN: TAMBAH TOMBOL BACK, BUKAN CANCEL
+                'x': SCREEN_WIDTH - 50 - 200, 'y': 530, 'width': 200, 'height': 50,
+                'text': "BACK", 'color': (200, 0, 0), 'text_color': WHITE,
+                'hover_color': (255, 100, 100)
+            }
+        }
+
+        # Host Waiting (ketika tidak ada client) - PERBAIKAN: TAMBAH TOMBOL BACK
+        self.button_templates['host_waiting_disconnected'] = {
+            'refresh_ip': {
+                'x': 50, 'y': 450, 'width': 240, 'height': 60,
+                'text': "REFRESH IP", 'color': (0, 100, 200), 'text_color': WHITE,
+                'hover_color': (100, 200, 255)
+            },
+            'back_host': {  # PERBAIKAN: TAMBAH TOMBOL BACK, BUKAN CANCEL
+                'x': SCREEN_WIDTH - 50 - 200, 'y': 530, 'width': 200, 'height': 50,
+                'text': "BACK", 'color': (200, 0, 0), 'text_color': WHITE,
+                'hover_color': (255, 100, 100)
+            }
+        }
         
         # Pause Menu
         self.button_templates['pause_menu'] = {
@@ -1568,6 +1955,7 @@ class Game:
                     self._load_buttons_from_template('settings_main')
                 elif self.menu_pages.settings_submenu == "audio":
                     self._load_buttons_from_template('settings_audio')
+               
                 elif self.menu_pages.settings_submenu == "difficulty":
                     self._load_buttons_from_template('settings_difficulty')
         
@@ -1581,7 +1969,10 @@ class Game:
             self._load_buttons_from_template('host_join')
         
         elif self.state_manager.state == GameState.ONLINE_HOST_WAITING:
-            self._load_buttons_from_template('host_waiting')
+            if self.network_manager.connected:
+                self._load_buttons_from_template('host_waiting_connected')
+            else:
+                self._load_buttons_from_template('host_waiting_disconnected')
         
         elif self.state_manager.state == GameState.ONLINE_JOIN_CONNECTING:
             self._load_buttons_from_template('join_connecting')
@@ -1613,64 +2004,58 @@ class Game:
                 hover_color=hover_color  # TAMBAHKAN INI!
             )
 
+    def toggle_pause_from_button(self):
+        """Toggle pause dari tombol (bukan dari icon atau ESC)"""
+        # Toggle pause dan dapatkan status baru
+        is_now_paused = self.pause_manager.toggle_pause()
+        if is_now_paused:
+            self.load_buttons_for_state()
+        else:
+            self.current_buttons.clear()
+        return is_now_paused
+
     def reset_game_over_state(self):
         """Reset state game over dan load tombol dengan benar"""
         self.current_buttons.clear()  # Pastikan kosong dulu
         self.load_buttons_for_state()  # Load tombol game over
+        # If multiplayer client, hide host-only buttons
+        if self.state_manager.is_multiplayer and self.network_manager and not self.network_manager.is_host:
+            # remove restart/back buttons so client won't see them
+            for key in ['restart', 'back_menu']:
+                if key in self.current_buttons:
+                    del self.current_buttons[key]
         print("🔄 Game over buttons loaded")
 
-    def _check_network_status(self):
-        """Check network status and suggest fixes"""
-        import platform
-        import os
-        
-        if platform.system() == "Windows":
-            print("\n🔍 Checking network setup...")
-            
-            # Check if fix script exists
-            batch_path = os.path.join(os.path.dirname(__file__), "fix_network.bat")
-            if not os.path.exists(batch_path):
-                print("⚠️  Network fix script not found!")
-                print("👉 Download fix_network.bat from game folder")
-                self._create_fix_network_batch()
-            else:
-                print("✅ Network fix script available")
-                print("👉 Run 'fix_network.bat' as Admin if connection issues")
-            
-            # Check port 5555 status
+    def sync_host_info_to_client(self):
+        """Kirim info host ke client (difficulty & controls)"""
+        if self.network_manager.is_host and self.network_manager.connected:
             try:
-                import socket
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(0.1)
-                result = sock.connect_ex(("127.0.0.1", 5555))
-                if result == 0:
-                    print("⚠️  Port 5555 is in use (maybe by another game)")
-            except:
-                pass
-
-    def _create_fix_network_batch(self):
-        """Create the fix_network.bat file if missing"""
-        import os
-        
-        batch_path = os.path.join(os.path.dirname(__file__), "fix_network.bat")
-        
-        # Create minimal batch file that downloads the full one
-        mini_batch = '''@echo off
-    echo Space Defender Network Fixer missing!
-    echo.
-    echo Please download the full fix_network.bat from:
-    echo https://github.com/your-repo/SpaceDefender/files/
-    echo.
-    echo Or contact the game distributor.
-    pause
-    '''
-        
-        try:
-            with open(batch_path, 'w') as f:
-                f.write(mini_batch)
-            print(f"✅ Created placeholder fix_network.bat")
-        except Exception as e:
-            print(f"❌ Could not create batch file: {e}")
+                # PERBAIKAN: Ambil data kontrol dengan benar
+                p1_controls = self.state_manager.control_settings.get_control_scheme_for_player(1)
+                p2_controls = self.state_manager.control_settings.get_control_scheme_for_player(2)
+                
+                payload = {
+                    'difficulty': self.game_manager.difficulty_manager.difficulty_mode,
+                    'controls': {
+                        'p1': p1_controls,
+                        'p2': p2_controls
+                    },
+                    'timestamp': pygame.time.get_ticks()
+                }
+                
+                # Kirim dengan event biasa
+                self.network_manager.send_event('host_info', payload)
+                
+                # PERBAIKAN: Juga kirim sebagai data biasa untuk backup
+                self.network_manager.send_data(json.dumps(payload))
+                
+                print(f"📤 Host sent host info to client: Difficulty={payload['difficulty']}, P1={p1_controls}, P2={p2_controls}")
+                return True
+                
+            except Exception as e:
+                print(f"❌ Error sending host info: {e}")
+                return False
+        return False
     
     def run(self):
         """Main game loop"""

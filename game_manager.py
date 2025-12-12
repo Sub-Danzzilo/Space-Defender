@@ -129,7 +129,7 @@ class GameManager:
         if hasattr(enemy, 'health') and not hasattr(enemy, 'max_health'):
             enemy.max_health = enemy.health
         
-        if powerup_manager.active_powerups['slow_enemies']:
+        if powerup_manager and powerup_manager.active_powerups.get('slow_enemies', False):
             enemy.speed *= 0.5
         
         enemies_group.add(enemy)
@@ -217,13 +217,16 @@ class GameManager:
         return players_dead
     
     def check_bullet_enemy_collision(self, player_id, bullets, enemies, sound_manager, 
-                                image_manager, powerup_manager, powerups_group):
+                                    image_manager, powerup_manager, powerups_group):
         """Check collision antara bullet player dan enemies - METHOD BARU"""
         score_gained = 0
         enemies_killed = 0
         
-        # Get score multiplier
-        score_multiplier = powerup_manager.get_score_multiplier()
+        # PERBAIKAN: Handle jika powerup_manager adalah None
+        if powerup_manager is None:
+            score_multiplier = 1.0
+        else:
+            score_multiplier = powerup_manager.get_score_multiplier()
         
         # Check collisions
         hit_dict = pygame.sprite.groupcollide(bullets, enemies, True, False)

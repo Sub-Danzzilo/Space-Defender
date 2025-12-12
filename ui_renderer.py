@@ -120,6 +120,9 @@ class UIRenderer:
 
     def _draw_player_powerups(self, powerup_manager, x, y, header, right_aligned=False):
         """Helper method untuk menggambar powerups seorang player"""
+        if powerup_manager is None:
+            return  # Jangan gambar apa-apa jika tidak ada powerup manager
+
         # Draw header
         header_text = self.tiny_font.render(header, True, MAGENTA)
         if right_aligned:
@@ -191,100 +194,92 @@ class UIRenderer:
             remaining_time = powerup_manager.powerup_timers['double_score'] // 60
             text = self.tiny_font.render(f"2xScore: {remaining_time}s", True, YELLOW)
             self.screen.blit(text, (x_pos, y_offset + (active_count * 15)))
-    
-    def _draw_powerup_status_multiplayer(self, powerup_manager_p1, powerup_manager_p2):
-        """Draw status powerup untuk multiplayer (text only)"""
-        # Player 1 Powerups (kiri)
-        p1_y_offset = 100
-        p1_active_count = 0
+
+    def init_pause_icon(self, image_manager=None):
+        """Initialize pause icon attributes"""
+        self.pause_icon = None
+        self.pause_icon_rect = None
+        self.pause_icon_hover = False
         
-        # Header Player 1
-        p1_header = self.tiny_font.render("P1 Powerups:", True, MAGENTA)
-        self.screen.blit(p1_header, (10, p1_y_offset))  # PERBAIKAN: self.screen, bukan self.surface
-        p1_y_offset += 15
+        # Grab icon from image manager if available
+        if image_manager:
+            try:
+                self.pause_icon = image_manager.images.get('pause')
+            except Exception:
+                self.pause_icon = None
         
-        if powerup_manager_p1.active_powerups['rapid_fire']:
-            remaining_time = powerup_manager_p1.powerup_timers['rapid_fire'] // 60
-            text = self.tiny_font.render(f"Rapid: {remaining_time}s", True, YELLOW)
-            self.screen.blit(text, (15, p1_y_offset + (p1_active_count * 15)))  # PERBAIKAN: self.screen
-            p1_active_count += 1
+        # Default placement
+        default_w, default_h = (40, 40)
+        if self.pause_icon:
+            default_w = self.pause_icon.get_width()
+            default_h = self.pause_icon.get_height()
         
-        if powerup_manager_p1.active_powerups['slow_enemies']:
-            remaining_time = powerup_manager_p1.powerup_timers['slow_enemies'] // 60
-            text = self.tiny_font.render(f"Slow: {remaining_time}s", True, CYAN)
-            self.screen.blit(text, (15, p1_y_offset + (p1_active_count * 15)))  # PERBAIKAN: self.screen
-            p1_active_count += 1
+        # Default position (akan diadjust di draw_pause_icon)
+        self.pause_icon_rect = pygame.Rect(
+            SCREEN_WIDTH - default_w - 10, 90, default_w, default_h
+        )
+        return self.pause_icon_rect
+
+    def draw_pause_icon(self, screen, mouse_pos, is_multiplayer=False):
+        """Draw pause icon with hover effect"""
+        if not self.pause_icon_rect:
+            return False
         
-        if powerup_manager_p1.active_powerups['multiple_bullets']:
-            remaining_time = powerup_manager_p1.powerup_timers['multiple_bullets'] // 60
-            text = self.tiny_font.render(f"Multi: {remaining_time}s", True, ORANGE)
-            self.screen.blit(text, (15, p1_y_offset + (p1_active_count * 15)))  # PERBAIKAN: self.screen
-            p1_active_count += 1
+        # Adjust position based on game mode
+        if self.pause_icon:
+            w = self.pause_icon.get_width()
+            h = self.pause_icon.get_height()
+        else:
+            w, h = (40, 40)
         
-        if powerup_manager_p1.active_powerups['speed_boost']:
-            remaining_time = powerup_manager_p1.powerup_timers['speed_boost'] // 60
-            text = self.tiny_font.render(f"Speed: {remaining_time}s", True, PURPLE)
-            self.screen.blit(text, (15, p1_y_offset + (p1_active_count * 15)))  # PERBAIKAN: self.screen
-            p1_active_count += 1
+        x = SCREEN_WIDTH - w - 10
+        y = 140 if is_multiplayer else 90
+
+        if is_multiplayer:
+            # Untuk multiplayer: TENGAH BAWAH - di bawah level (tengah horizontal)
+            x = (SCREEN_WIDTH - w) // 2
+            y = SCREEN_HEIGHT - 550
         
-        if powerup_manager_p1.active_powerups['invincibility']:
-            remaining_time = powerup_manager_p1.powerup_timers['invincibility'] // 60
-            text = self.tiny_font.render(f"Shield: {remaining_time}s", True, GREEN)
-            self.screen.blit(text, (15, p1_y_offset + (p1_active_count * 15)))  # PERBAIKAN: self.screen
-            p1_active_count += 1
+        # Update rect
+        self.pause_icon_rect.x = x
+        self.pause_icon_rect.y = y
+        self.pause_icon_rect.w = w
+        self.pause_icon_rect.h = h
         
-        if powerup_manager_p1.active_powerups['double_score']:
-            remaining_time = powerup_manager_p1.powerup_timers['double_score'] // 60
-            text = self.tiny_font.render(f"2xScore: {remaining_time}s", True, YELLOW)
-            self.screen.blit(text, (15, p1_y_offset + (p1_active_count * 15)))  # PERBAIKAN: self.screen
+        # Check hover
+        self.pause_icon_hover = self.pause_icon_rect.collidepoint(mouse_pos)
         
-        # Player 2 Powerups (kanan)
-        p2_y_offset = 100
-        p2_active_count = 0
+        # Draw icon with hover effect
+        if self.pause_icon:
+            if self.pause_icon_hover:
+                # Draw glow effect
+                glow = pygame.Surface((w + 8, h + 8), pygame.SRCALPHA)
+                pygame.draw.circle(
+                    glow, (255, 255, 255, 20), 
+                    (glow.get_width()//2, glow.get_height()//2),
+                    max(glow.get_width(), glow.get_height())//2
+                )
+                screen.blit(glow, (x - 4, y - 4))
+            
+            # Draw actual icon
+            screen.blit(self.pause_icon, (x, y))
+        else:
+            # Fallback: draw simple pause symbol
+            color = (200, 200, 200) if self.pause_icon_hover else (150, 150, 150)
+            pygame.draw.rect(screen, (30, 30, 30), self.pause_icon_rect, border_radius=8)
+            pygame.draw.rect(
+                screen, color, 
+                (x + 8, y + 8, 6, h - 16), 
+                border_radius=2
+            )
+            pygame.draw.rect(
+                screen, color, 
+                (x + 16 + 6, y + 8, 6, h - 16), 
+                border_radius=2
+            )
         
-        # Header Player 2
-        p2_header = self.tiny_font.render("P2 Powerups:", True, MAGENTA)
-        p2_header_rect = p2_header.get_rect(topright=(SCREEN_WIDTH - 10, p2_y_offset))
-        self.screen.blit(p2_header, p2_header_rect)  # PERBAIKAN: self.screen
-        p2_y_offset += 15
-        
-        if powerup_manager_p2.active_powerups['rapid_fire']:
-            remaining_time = powerup_manager_p2.powerup_timers['rapid_fire'] // 60
-            text = self.tiny_font.render(f"Rapid: {remaining_time}s", True, YELLOW)
-            text_rect = text.get_rect(topright=(SCREEN_WIDTH - 15, p2_y_offset + (p2_active_count * 15)))
-            self.screen.blit(text, text_rect)  # PERBAIKAN: self.screen
-            p2_active_count += 1
-        
-        if powerup_manager_p2.active_powerups['slow_enemies']:
-            remaining_time = powerup_manager_p2.powerup_timers['slow_enemies'] // 60
-            text = self.tiny_font.render(f"Slow: {remaining_time}s", True, CYAN)
-            text_rect = text.get_rect(topright=(SCREEN_WIDTH - 15, p2_y_offset + (p2_active_count * 15)))
-            self.screen.blit(text, text_rect)  # PERBAIKAN: self.screen
-            p2_active_count += 1
-        
-        if powerup_manager_p2.active_powerups['multiple_bullets']:
-            remaining_time = powerup_manager_p2.powerup_timers['multiple_bullets'] // 60
-            text = self.tiny_font.render(f"Multi: {remaining_time}s", True, ORANGE)
-            text_rect = text.get_rect(topright=(SCREEN_WIDTH - 15, p2_y_offset + (p2_active_count * 15)))
-            self.screen.blit(text, text_rect)  # PERBAIKAN: self.screen
-            p2_active_count += 1
-        
-        if powerup_manager_p2.active_powerups['speed_boost']:
-            remaining_time = powerup_manager_p2.powerup_timers['speed_boost'] // 60
-            text = self.tiny_font.render(f"Speed: {remaining_time}s", True, PURPLE)
-            text_rect = text.get_rect(topright=(SCREEN_WIDTH - 15, p2_y_offset + (p2_active_count * 15)))
-            self.screen.blit(text, text_rect)  # PERBAIKAN: self.screen
-            p2_active_count += 1
-        
-        if powerup_manager_p2.active_powerups['invincibility']:
-            remaining_time = powerup_manager_p2.powerup_timers['invincibility'] // 60
-            text = self.tiny_font.render(f"Shield: {remaining_time}s", True, GREEN)
-            text_rect = text.get_rect(topright=(SCREEN_WIDTH - 15, p2_y_offset + (p2_active_count * 15)))
-            self.screen.blit(text, text_rect)  # PERBAIKAN: self.screen
-            p2_active_count += 1
-        
-        if powerup_manager_p2.active_powerups['double_score']:
-            remaining_time = powerup_manager_p2.powerup_timers['double_score'] // 60
-            text = self.tiny_font.render(f"2xScore: {remaining_time}s", True, YELLOW)
-            text_rect = text.get_rect(topright=(SCREEN_WIDTH - 15, p2_y_offset + (p2_active_count * 15)))
-            self.screen.blit(text, text_rect)  # PERBAIKAN: self.screen
+        return self.pause_icon_hover
+
+    def get_pause_icon_rect(self):
+        """Get current pause icon rectangle for click detection"""
+        return self.pause_icon_rect

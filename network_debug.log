@@ -1026,3 +1026,39 @@
 2025-12-05 20:27:44,297 - Found IP on Ethernet adapter ZeroTier One [3efa5cb78ab44ed4]: 10.147.19.47
 2025-12-05 20:29:41,108 - zerotier-cli failed: [WinError 2] The system cannot find the file specified
 2025-12-05 20:29:41,235 - Found IP on Ethernet adapter ZeroTier One [3efa5cb78ab44ed4]: 10.147.19.47
+2025-12-12 10:10:42,187 - \U0001f517 CONNECTING to 192.168.1.100:7777
+2025-12-12 10:10:42,189 - Attempt 1/2 (timeout: 5s)
+2025-12-12 10:10:47,190 - \u23f3 Timeout on attempt 1: timed out
+2025-12-12 10:10:49,192 - Attempt 2/2 (timeout: 5s)
+2025-12-12 10:10:54,193 - \u23f3 Timeout on attempt 2: timed out
+2025-12-12 10:10:54,193 - Host not responding after 2 attempts
+2025-12-12 10:11:05,441 - \U0001f517 CONNECTING to 192.168.1.100:7777
+2025-12-12 10:11:05,442 - Attempt 1/2 (timeout: 5s)
+2025-12-12 10:11:10,442 - \u23f3 Timeout on attempt 1: timed out
+2025-12-12 10:11:12,443 - Attempt 2/2 (timeout: 5s)
+2025-12-12 10:11:17,444 - \u23f3 Timeout on attempt 2: timed out
+2025-12-12 10:11:17,444 - Host not responding after 2 attempts
+2025-12-12 10:16:36,249 - \U0001f517 CONNECTING to 10.19.193.47:7777
+2025-12-12 10:16:36,251 - Attempt 1/2 (timeout: 5s)
+2025-12-12 10:16:38,292 - \U0001f6ab Connection refused on attempt 1: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-12-12 10:16:40,294 - Attempt 2/2 (timeout: 5s)
+2025-12-12 10:16:42,327 - \U0001f6ab Connection refused on attempt 2: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-12-12 10:16:42,327 - Connection refused - Host not running or firewall blocking
+2025-12-12 10:17:04,014 - \U0001f517 CONNECTING to 10.19.193.47:7777
+2025-12-12 10:17:04,015 - Attempt 1/2 (timeout: 5s)
+2025-12-12 10:17:06,060 - \U0001f6ab Connection refused on attempt 1: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-12-12 10:17:08,151 - Attempt 2/2 (timeout: 5s)
+2025-12-12 10:17:10,191 - \U0001f6ab Connection refused on attempt 2: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-12-12 10:17:10,192 - Connection refused - Host not running or firewall blocking
+2025-12-12 10:17:51,840 - \U0001f517 CONNECTING to 10.19.193.47:7777
+2025-12-12 10:17:51,840 - Attempt 1/2 (timeout: 5s)
+2025-12-12 10:17:53,871 - \U0001f6ab Connection refused on attempt 1: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-12-12 10:17:55,872 - Attempt 2/2 (timeout: 5s)
+2025-12-12 10:17:58,574 - \U0001f6ab Connection refused on attempt 2: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-12-12 10:17:58,575 - Connection refused - Host not running or firewall blocking
+2025-12-12 10:49:20,703 - \U0001f517 CONNECTING to 192.168.1.10:7777
+2025-12-12 10:49:20,706 - Attempt 1/2 (timeout: 5s)
+2025-12-12 10:49:25,706 - \u23f3 Timeout on attempt 1: timed out
+2025-12-12 10:49:27,707 - Attempt 2/2 (timeout: 5s)
+2025-12-12 10:49:32,708 - \u23f3 Timeout on attempt 2: timed out
+2025-12-12 10:49:32,709 - Host not responding after 2 attempts

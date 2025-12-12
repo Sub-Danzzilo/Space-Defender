@@ -27,13 +27,23 @@ class Enemy(pygame.sprite.Sprite):
         self.score_value = 10
         self.enemy_type = "normal"
     
-    def update(self):
-        """Update dengan forced movement"""
-        self.rect.y += self.speed
-        
-        # FORCE MOVEMENT: Jika stuck di atas, turun paksa
-        if self.rect.y < -50:
-            self.rect.y += 5
+    def update(self, is_slow=False):
+
+        # minimal speed biar ga nyangkut
+        if not hasattr(self, "min_speed"):
+            self.min_speed = 0.5
+
+        base_speed = max(self.speed, self.min_speed)
+
+        # slow effect
+        if is_slow:
+            base_speed *= 0.5
+
+        self.rect.y += base_speed
+
+        # anti-stuck
+        if self.rect.y < -40:
+            self.rect.y += 3
     
     def take_damage(self, damage):
         """Musuh terkena damage"""

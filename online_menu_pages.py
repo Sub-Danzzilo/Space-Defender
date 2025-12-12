@@ -144,24 +144,23 @@ class OnlineMenuPages:
             if btn in buttons:
                 buttons[btn].update_hover(mouse_pos)
     
-    def draw_host_waiting(self, screen, network_manager, buttons, difficulty_mode=None, control_settings=None):
+    def draw_host_waiting(self, screen, network_manager, buttons, difficulty_mode=None, control_settings=None, client_cancel_alert_time=0):
         """Screen host waiting for client - WITH PROPER STAR BACKGROUND"""
         
         # ===== TITLE SECTION =====
         title_bg = pygame.Rect(SCREEN_WIDTH//2 - 250, 20, 500, 80)
         pygame.draw.rect(screen, (0, 0, 0, 180), title_bg, border_radius=15)
         pygame.draw.rect(screen, (0, 200, 200), title_bg, 3, border_radius=15)
-        
+
         title_font = pygame.font.Font(None, 48)
         title = title_font.render("HOST GAME", True, (0, 200, 255))
-        
+
+        # PERBAIKAN: Subtitle tetap, tidak ada animasi dots
         if network_manager.connected:
-            subtitle = self.small_font.render("Player Connected!", True, (0, 255, 0))
+            subtitle = self.small_font.render("Player Connected - Ready to Start", True, (0, 255, 0))
         else:
-            dot_count = (pygame.time.get_ticks() // 500) % 4
-            dots = "." * dot_count
-            subtitle = self.small_font.render(f"Waiting for player{dots}", True, (200, 200, 255))
-        
+            subtitle = self.small_font.render("Waiting for player to connect", True, (200, 200, 255))
+
         screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 35))
         screen.blit(subtitle, (SCREEN_WIDTH//2 - subtitle.get_width()//2, 75))
         
@@ -216,21 +215,37 @@ class OnlineMenuPages:
         # ===== BUTTONS SECTION =====
         buttons_y = ip_section_y + 110
         
-        # Tombol Refresh IP (KIRI)
-        refresh_width = 240
-        refresh_x = 50
+        # HAPUS TOMBOL YANG ADA SEBELUMNYA (refresh_ip dan start_online_game)
+        if 'refresh_ip' in buttons:
+            del buttons['refresh_ip']
+        if 'start_online_game' in buttons:
+            del buttons['start_online_game']
         
-        if 'refresh_ip' not in buttons:
-            buttons['refresh_ip'] = Button(
-                refresh_x, buttons_y, refresh_width, 50,
+        # Tombol kiri: tergantung kondisi
+        if network_manager.connected:
+            # Jika client sudah connect, tampilkan START ONLINE GAME
+            left_button = Button(
+                50, buttons_y, 240, 50,
+                "START ONLINE GAME",
+                (0, 180, 0), (255, 255, 255),
+                font_size=24,
+                hover_color=(0, 255, 100)
+            )
+            # Simpan sebagai start_online_game untuk identifikasi
+            buttons['start_online_game'] = left_button
+        else:
+            # Jika belum connect, tampilkan REFRESH IP
+            left_button = Button(
+                50, buttons_y, 240, 50,
                 "REFRESH IP", 
                 (0, 100, 200), (255, 255, 255),
                 font_size=24,
                 hover_color=(100, 200, 255)
             )
-        buttons['refresh_ip'].draw(screen)
+            # Simpan sebagai refresh_ip untuk identifikasi
+            buttons['refresh_ip'] = left_button
         
-        # Tombol Back (KANAN)
+        # Tombol kanan (CANCEL/BACK) - selalu ada
         cancel_width = 200
         cancel_x = SCREEN_WIDTH - 50 - cancel_width
         
@@ -242,16 +257,34 @@ class OnlineMenuPages:
                 font_size=22,
                 hover_color=(255, 100, 100)
             )
-        buttons['cancel_host'].draw(screen)
+        
+        # ===== CLIENT CANCELLED ALERT =====
+        if client_cancel_alert_time > 0:
+            current_time = pygame.time.get_ticks()
+            if current_time - client_cancel_alert_time < 3000:  # 3 detik
+                alert_y = buttons_y + 80
+                alert_rect = pygame.Rect(50, alert_y, SCREEN_WIDTH - 100, 40)
+                pygame.draw.rect(screen, (100, 20, 20, 200), alert_rect, border_radius=8)
+                pygame.draw.rect(screen, (255, 100, 100), alert_rect, 2, border_radius=8)
+                
+                alert_text = self.small_font.render("Client cancelled connection", True, (255, 200, 200))
+                screen.blit(alert_text, (SCREEN_WIDTH//2 - alert_text.get_width()//2, alert_y + 10))
+        
+        # ===== UPDATE HOVER SEBELUM MENGGAMBAR =====
+        # Harus update hover dulu agar draw() memakai state is_hovered yang up-to-date
+        mouse_pos = pygame.mouse.get_pos()
+        for btn in buttons.values():
+            btn.update_hover(mouse_pos)
         
         # ===== STATUS SECTION =====
-        status_y = buttons_y + 80
+        # PERBAIKAN: Gunakan network_manager.connected untuk status
+        status_y = buttons_y + (130 if client_cancel_alert_time > 0 and current_time - client_cancel_alert_time < 3000 else 80)
         
         status_rect = pygame.Rect(50, status_y, SCREEN_WIDTH - 100, 80)
         pygame.draw.rect(screen, (0, 0, 0, 180), status_rect, border_radius=10)
         pygame.draw.rect(screen, (0, 120, 180), status_rect, 2, border_radius=10)
         
-        # Status text
+        # Status text - PERBAIKAN: Gunakan network_manager.connected
         if network_manager.connected:
             status_color = (0, 255, 0)
             status_text = "PLAYER CONNECTED!"
@@ -302,65 +335,109 @@ class OnlineMenuPages:
             
             # Player 1 Controls detail
             p1_y = controls_y + 45
-            p1_label = self.small_font.render("Player 1 Controls:", True, (200, 200, 200))
+            p1_label = self.small_font.render("Player 1 Controls (YOU):", True, (200, 200, 200))
             p1_scheme = self.small_font.render(p1_controls['name'], True, (0, 255, 0))
             screen.blit(p1_label, (controls_rect.x + 250, p1_y))
-            screen.blit(p1_scheme, (controls_rect.x + 400, p1_y))
+            screen.blit(p1_scheme, (controls_rect.x + 475, p1_y))
             
             # Player 2 Controls detail
             p2_y = p1_y + 25
-            p2_label = self.small_font.render("Player 2 Controls:", True, (200, 200, 200))
+            p2_label = self.small_font.render("Player 2 Controls (CLIENT):", True, (200, 200, 200))
             p2_scheme = self.small_font.render(p2_controls['name'], True, (0, 200, 255))
             screen.blit(p2_label, (controls_rect.x + 250, p2_y))
-            screen.blit(p2_scheme, (controls_rect.x + 400, p2_y))
+            screen.blit(p2_scheme, (controls_rect.x + 475, p2_y))
         
         # Port info
-        port_y = controls_y + 85
+        port_y = controls_y + 70
         port_text = self.small_font.render(f"Port: {network_manager.port}", True, (200, 200, 200))
         screen.blit(port_text, (controls_rect.x + 30, port_y))
         
         # Connection info
-        conn_y = port_y + 25
+        conn_y = port_y + 45
         conn_text = self.small_font.render("Both players must be in same ZeroTier network", True, (255, 255, 100))
         screen.blit(conn_text, (SCREEN_WIDTH//2 - conn_text.get_width()//2, conn_y))
         
-        # ===== START GAME BUTTON SECTION =====
-        if network_manager.connected:
-            start_y = controls_y + 160  # Disesuaikan dengan box controls yang lebih tinggi
-            
-            if 'start_online_game' not in buttons:
-                buttons['start_online_game'] = Button(
-                    SCREEN_WIDTH//2 - 150, start_y, 300, 60,
-                    "START ONLINE GAME",
-                    (0, 180, 0), (255, 255, 255),
-                    font_size=26,
-                    hover_color=(0, 255, 0)
-                )
-            buttons['start_online_game'].draw(screen)
-            
-            # Status final
-            final_y = start_y + 70
-            final_text = self.small_font.render("Ready! Game will start for both players.", True, (0, 255, 0))
-            screen.blit(final_text, (SCREEN_WIDTH//2 - final_text.get_width()//2, final_y))
-        
-        # ===== UPDATE HOVER =====
-        mouse_pos = pygame.mouse.get_pos()
-        for btn in ['refresh_ip', 'cancel_host', 'start_online_game']:
-            if btn in buttons:
-                buttons[btn].update_hover(mouse_pos)
+        # ===== GAMBAR TOMBOL =====
+        # PERBAIKAN: Hanya gambar tombol yang ada di buttons
+        for button in buttons.values():
+            button.draw(screen)
 
-    def draw_join_connecting(self, screen, network_manager, buttons):
-        """Screen client mencoba connect - COMPACT VERSION"""
+    def draw_waiting_for_host_popup(self, screen):
+        """Popup kecil untuk client yang menunggu host - FIXED OVERFLOW"""
+        # Overlay semi-transparent (seperti pause)
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))  # Sedikit lebih gelap dari pause
+        screen.blit(overlay, (0, 0))
+        
+        # Kotak popup - LEBIH BESAR dikit
+        popup_width, popup_height = 500, 200
+        popup_x = (SCREEN_WIDTH - popup_width) // 2
+        popup_y = (SCREEN_HEIGHT - popup_height) // 2
+        
+        # Background popup
+        pygame.draw.rect(screen, (30, 40, 60), (popup_x, popup_y, popup_width, popup_height), border_radius=15)
+        pygame.draw.rect(screen, (0, 150, 200), (popup_x, popup_y, popup_width, popup_height), 3, border_radius=15)
+        
+        # Judul - SINGKAT AJA
+        title_font = pygame.font.Font(None, 32)
+        title = title_font.render("WAITING FOR HOST", True, (0, 200, 255))
+        screen.blit(title, (popup_x + (popup_width - title.get_width()) // 2, popup_y + 20))
+        
+        # Pesan - DIPENDEKIN DAN DIPECAH
+        message_lines = [
+            "Connected to host!",
+            "Waiting for host to start game..."
+        ]
+        
+        for i, line in enumerate(message_lines):
+            line_surface = self.small_font.render(line, True, (200, 200, 200))
+            # CENTER TEXT, JANGAN MANUAL POSITIONING
+            screen.blit(line_surface, (popup_x + (popup_width - line_surface.get_width()) // 2, popup_y + 60 + i * 25))
+        
+        # Tombol Cancel dengan hover effect
+        cancel_width, cancel_height = 140, 40
+        cancel_x = popup_x + (popup_width - cancel_width) // 2
+        cancel_y = popup_y + popup_height - cancel_height - 20
+        
+        # Cek hover
+        mouse_pos = pygame.mouse.get_pos()
+        cancel_rect = pygame.Rect(cancel_x, cancel_y, cancel_width, cancel_height)
+        is_hover = cancel_rect.collidepoint(mouse_pos)
+        
+        # Warna tombol berdasarkan hover
+        if is_hover:
+            btn_color = (220, 60, 60)  # Merah terang saat hover
+            border_color = (255, 120, 120)
+        else:
+            btn_color = (180, 40, 40)  # Merah gelap saat normal
+            border_color = (255, 100, 100)
+        
+        # Gambar tombol cancel
+        pygame.draw.rect(screen, btn_color, cancel_rect, border_radius=8)
+        pygame.draw.rect(screen, border_color, cancel_rect, 2, border_radius=8)
+        
+        cancel_text = self.small_font.render("CANCEL CONNECT", True, (255, 255, 255))
+        screen.blit(cancel_text, (cancel_x + (cancel_width - cancel_text.get_width()) // 2, cancel_y + 12))
+        
+        return cancel_rect  # Kembalikan rect untuk klik detection
+
+    def draw_join_connecting(self, screen, network_manager, buttons, game_instance=None):
+        """
+        Screen client mencoba connect - COMPACT VERSION
+        - Shows Host Info area: Difficulty & Controls (N/A until host info arrives)
+        - Shows a small centered popup when client is connected and waiting for host to START
+        """
         
         # ===== TITLE =====
         title_bg = pygame.Rect(SCREEN_WIDTH//2 - 250, 20, 500, 80)
         pygame.draw.rect(screen, (0, 0, 0, 180), title_bg, border_radius=15)
         pygame.draw.rect(screen, (0, 150, 200), title_bg, 3, border_radius=15)
-        
+
         title_font = pygame.font.Font(None, 48)
         title = title_font.render("JOIN ONLINE GAME", True, (0, 200, 255))
-        subtitle = self.small_font.render("Connect to Host", True, (150, 220, 255))
-        
+        # PERBAIKAN: Subtitle statis untuk client
+        subtitle = self.small_font.render("Enter host IP address to connect", True, (150, 220, 255))
+
         screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 35))
         screen.blit(subtitle, (SCREEN_WIDTH//2 - subtitle.get_width()//2, 75))
         
@@ -415,26 +492,25 @@ class OnlineMenuPages:
             cursor_rect = pygame.Rect(cursor_x, input_rect.y + 10, 2, 30)
             pygame.draw.rect(screen, (255, 255, 255), cursor_rect)
         
-        # ===== BUTTONS (SEJAJAR - KEBALIKAN) =====
+        # ===== BUTTONS (SEJAJAR) =====
         buttons_y = ip_section_y + 110
 
-        # Connect to Host button (KIRI)
+        # Selalu gunakan CONNECT TO HOST (jangan ubah jadi START ONLINE GAME)
         connect_width = 240
-        connect_x = 50  # 50px dari kiri
-
+        connect_x = 50
         if 'connect_to_host' not in buttons:
             buttons['connect_to_host'] = Button(
                 connect_x, buttons_y, connect_width, 50,
-                "CONNECT TO HOST", 
-                (0, 180, 0), (255, 255, 255),
-                font_size=24,
-                hover_color=(0, 255, 0)
+                "CONNECT TO HOST",
+                (0, 100, 200), (255, 255, 255),
+                font_size=22,
+                hover_color=(100, 200, 255)
             )
         buttons['connect_to_host'].draw(screen)
 
-        # Back button (KANAN)
+        # Back button (KANAN) - selalu ada
         back_width = 200
-        back_x = SCREEN_WIDTH - 50 - back_width  # 50px dari kanan
+        back_x = SCREEN_WIDTH - 50 - back_width
 
         if 'cancel_join' not in buttons:
             buttons['cancel_join'] = Button(
@@ -449,35 +525,75 @@ class OnlineMenuPages:
         # ===== STATUS =====
         status_y = buttons_y + 80
         
-        # PERBAIKAN: Ambil error dari network_manager jika ada
-        if not self.error_message and hasattr(network_manager, 'error_message') and network_manager.error_message:
-            self.error_message = network_manager.error_message
-            self.error_timestamp = pygame.time.get_ticks()
+        # PERBAIKAN: Ambil error dari game_instance juga
+        if not self.error_message and game_instance and hasattr(game_instance, 'online_menu_pages'):
+            if game_instance.online_menu_pages.error_message:
+                self.error_message = game_instance.online_menu_pages.error_message
+                self.error_timestamp = game_instance.online_menu_pages.error_timestamp
         
-        # PERBAIKAN: Tampilkan error lebih lama (10 detik)
+        # PERBAIKAN: Logic yang benar untuk show_error
         current_time = pygame.time.get_ticks()
-        show_error = (self.error_message and 
-                    current_time - getattr(self, 'error_timestamp', 0) < 10000)  # 10 detik
+        show_error = False
+        error_duration = 10000  # Default 10 detik untuk semua error
+        
+        # Tentukan apakah harus show error
+        if self.error_message:
+            # PERBAIKAN: Bedakan durasi berdasarkan jenis error
+            if "Host cancelled the game" in self.error_message:
+                error_duration = 3000  # 3 detik khusus untuk host cancelled
+                show_error = (current_time - self.error_timestamp < error_duration)
+            else:
+                # Untuk error lainnya (connection, invalid IP, dll)
+                show_error = (current_time - self.error_timestamp < error_duration)
         
         status_rect = pygame.Rect(50, status_y, SCREEN_WIDTH - 100, 80)
         pygame.draw.rect(screen, (0, 0, 0, 180), status_rect, border_radius=10)
-        pygame.draw.rect(screen, (0, 120, 180), status_rect, 2, border_radius=10)
         
-        # Status text berdasarkan kondisi
+        # PERBAIKAN: Tentukan status_text berdasarkan jenis error
         if network_manager.connected:
-            status_color = (0, 255, 0)
+            status_color = (0, 200, 0)  # Hijau jika connected
             status_text = "CONNECTED"
-            detail_text = "Waiting for host to start game..."
-        elif show_error:
+            detail_text = "Connected to host"
+            border_color = (0, 200, 0)
+        
+        elif show_error and self.error_message:
             status_color = (255, 50, 50)  # Merah untuk error
-            status_text = "CONNECTION FAILED!"
-            detail_text = f"{self.error_message}"
+            
+            # PERBAIKAN: Tentukan status_text berdasarkan jenis error
+            if "Host cancelled the game" in self.error_message:
+                status_text = "HOST CANCELLED"
+                detail_text = "Host cancelled the connection"
+            elif "Please enter host IP address" in self.error_message:
+                status_text = "IP REQUIRED"
+                detail_text = "Please enter host IP address"
+            elif "Invalid IP format" in self.error_message:
+                status_text = "INVALID IP FORMAT"
+                detail_text = "Enter a valid IP (e.g., 192.168.1.100)"
+            elif "Host not responding" in self.error_message:
+                status_text = "NO RESPONSE"
+                detail_text = "Host is not responding"
+            elif "Connection refused" in self.error_message:
+                status_text = "CONNECTION REFUSED"
+                detail_text = "Host refused connection (check IP/port)"
+            elif "Connection failed" in self.error_message or "timed out" in self.error_message.lower():
+                status_text = "CONNECTION FAILED"
+                detail_text = "Failed to connect to host"
+            else:
+                # Fallback untuk error lainnya
+                status_text = "CONNECTION ERROR"
+                detail_text = self.error_message[:40] + "..." if len(self.error_message) > 40 else self.error_message
+            
+            border_color = (255, 50, 50)
+        
         else:
-            status_color = (255, 255, 0)
+            status_color = (255, 255, 0)  # Kuning untuk ready
             dot_count = (pygame.time.get_ticks() // 500) % 4
             dots = "." * dot_count
             status_text = f"READY TO CONNECT{dots}"
             detail_text = "Enter host IP and click CONNECT"
+            border_color = (0, 120, 180)
+        
+        pygame.draw.rect(screen, border_color, status_rect, 2, border_radius=10)
         
         status_label = self.font.render(status_text, True, status_color)
         screen.blit(status_label, (SCREEN_WIDTH//2 - status_label.get_width()//2, status_y + 15))
@@ -485,44 +601,125 @@ class OnlineMenuPages:
         detail = self.small_font.render(detail_text, True, (200, 200, 200))
         screen.blit(detail, (SCREEN_WIDTH//2 - detail.get_width()//2, status_y + 50))
         
-        # ===== SHORT INSTRUCTIONS =====
-        if not network_manager.connected:  # Hanya tampilkan jika belum connect
-            instruct_y = status_y + 100
-            
-            # TINGGIKAN KOTAK: dari 100 menjadi 140 (atau 160 untuk lebih lega)
-            box_height = 140  # Ganti dari 100 ke 140 atau sesuaikan kebutuhan
-            instruct_rect = pygame.Rect(50, instruct_y, SCREEN_WIDTH - 100, box_height)
-            pygame.draw.rect(screen, (20, 20, 40, 180), instruct_rect, border_radius=10)
-            pygame.draw.rect(screen, (150, 0, 150), instruct_rect, 2, border_radius=10)
-            
-            instruct_title = self.small_font.render("QUICK GUIDE:", True, (255, 100, 255))
-            screen.blit(instruct_title, (SCREEN_WIDTH//2 - instruct_title.get_width()//2, instruct_y + 15))
-            
-            instructions = [
-                "• Ask host for ZeroTier IP",
-                "• Enter IP above and click CONNECT",
-                "• Both must be on same ZeroTier"
-            ]
-            
-            # SESUAIKAN POSISI TEKS DENGAN KOTAK YANG LEBIH TINGGI
-            # Hitung total tinggi konten teks: 3 baris × 25 spacing = 75
-            # Beri margin atas lebih besar (30) dan margin bawah otomatis
-            start_y = instruct_y + 45  # Dari 35 menjadi 45 untuk memberikan ruang lebih
-            
-            for i, line in enumerate(instructions):
-                text = self.small_font.render(line, True, (220, 200, 255))
-                screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, start_y + i * 30))  # Spacing dari 25 ke 30
+        # ===== HOST INFO PANEL =====
+        host_info_y = status_y + 100
+        host_info_rect = pygame.Rect(50, host_info_y, SCREEN_WIDTH - 100, 150)
+        pygame.draw.rect(screen, (20, 20, 40, 180), host_info_rect, border_radius=10)
+        pygame.draw.rect(screen, (150, 0, 150), host_info_rect, 2, border_radius=10)
+
+        # Title untuk host info
+        host_info_title = self.font.render("HOST INFO", True, (255, 100, 255))
+        screen.blit(host_info_title, (SCREEN_WIDTH//2 - host_info_title.get_width()//2, host_info_y + 10))
         
-        # # ===== FOOTER KEYS =====
-        # footer_y = SCREEN_HEIGHT - 40
-        # shortcuts = [
-        #     "Press ENTER to connect • Press ESC to go back",
-        #     "Click IP field to type • Tab to switch fields"
-        # ]
+        # PERBAIKAN: Reset host_info jika host cancelled
+        if show_error and self.error_message == "Host cancelled the game":
+            # Force reset host info
+            if game_instance:
+                game_instance.remote_host_info = None
+            
+            # Gambar teks N/A
+            diff_surface = self.small_font.render("Difficulty: N/A", True, (200, 200, 200))
+            screen.blit(diff_surface, (host_info_rect.x + 30, host_info_y + 45))
+            
+            p1_label = self.small_font.render("Player 1 Controls (HOST):", True, (200, 200, 200))
+            p1_scheme = self.small_font.render("N/A", True, self.COLOR_P1)
+            screen.blit(p1_label, (host_info_rect.x + 250, host_info_y + 45))
+            screen.blit(p1_scheme, (host_info_rect.x + 460, host_info_y + 45))
+            
+            p2_label = self.small_font.render("Player 2 Controls (YOU):", True, (200, 200, 200))
+            p2_scheme = self.small_font.render("N/A", True, self.COLOR_P2)
+            screen.blit(p2_label, (host_info_rect.x + 250, host_info_y + 70))
+            screen.blit(p2_scheme, (host_info_rect.x + 460, host_info_y + 70))
         
-        # for i, text in enumerate(shortcuts):
-        #     shortcut = self.tiny_font.render(text, True, (150, 200, 255))
-        #     screen.blit(shortcut, (SCREEN_WIDTH//2 - shortcut.get_width()//2, footer_y + i * 15))
+        else:
+            # Kode normal untuk menampilkan host info
+            # PERBAIKAN: Prioritaskan game_instance.remote_host_info jika ada
+            host_info = None
+            if game_instance and hasattr(game_instance, 'remote_host_info') and game_instance.remote_host_info:
+                host_info = game_instance.remote_host_info
+                print(f"📊 Using host_info from game_instance: {host_info.get('difficulty')}")
+            elif hasattr(network_manager, 'last_event') and isinstance(network_manager.last_event, dict):
+                if network_manager.last_event.get('type') == 'host_info':
+                    host_info = network_manager.last_event.get('payload', {})
+                    # Simpan juga di instance untuk referensi
+                    if game_instance:
+                        game_instance.remote_host_info = host_info
+                    print(f"📊 Using host_info from network_manager: {host_info.get('difficulty')}")
+            
+            # PERBAIKAN: Jika connected tapi host_info masih None, coba request
+            if network_manager.connected and not host_info and game_instance:
+                print("⚠️ Connected but no host_info, requesting...")
+                try:
+                    network_manager.send_event('client_connected', {'request': 'host_info'})
+                except:
+                    pass
+            
+            # Difficulty
+            if host_info:
+                diff_text = host_info.get('difficulty', 'N/A')
+                diff_color = self.DIFFICULTY_COLORS.get(diff_text, (255, 255, 255))
+                diff_display = diff_text.upper()
+            else:
+                diff_text = "N/A"
+                diff_color = (200, 200, 200)
+                diff_display = "N/A"
+            
+            diff_surface = self.small_font.render(f"Difficulty: {diff_display}", True, diff_color)
+            screen.blit(diff_surface, (host_info_rect.x + 30, host_info_y + 45))
+            
+            # Controls detail
+            if host_info:
+                ctrls = host_info.get('controls', {})
+                p1_ctrl = ctrls.get('p1', 'N/A')
+                p2_ctrl = ctrls.get('p2', 'N/A')
+            else:
+                p1_ctrl = "N/A"
+                p2_ctrl = "N/A"
+            
+            # Player 1 Controls
+            p1_y = host_info_y + 45
+            p1_label = self.small_font.render("Player 1 Controls (HOST):", True, (200, 200, 200))
+            p1_scheme = self.small_font.render(p1_ctrl, True, self.COLOR_P1)
+            screen.blit(p1_label, (host_info_rect.x + 250, p1_y))
+            screen.blit(p1_scheme, (host_info_rect.x + 460, p1_y))
+            
+            # Player 2 Controls
+            p2_y = p1_y + 25
+            p2_label = self.small_font.render("Player 2 Controls (YOU):", True, (200, 200, 200))
+            p2_scheme = self.small_font.render(p2_ctrl, True, self.COLOR_P2)
+            screen.blit(p2_label, (host_info_rect.x + 250, p2_y))
+            screen.blit(p2_scheme, (host_info_rect.x + 460, p2_y))
+        
+        # Connection info
+        conn_y = host_info_y + 115
+        conn_text = self.small_font.render("Both players must be in same ZeroTier network", True, (255, 255, 100))
+        screen.blit(conn_text, (SCREEN_WIDTH//2 - conn_text.get_width()//2, conn_y))
+        
+        # --- Client waiting popup (small) ---
+        if game_instance and getattr(game_instance, 'client_waiting_popup', False):
+            # PERBAIKAN: Hanya tampilkan popup jika tidak ada error
+            if not show_error:
+                # dim background (like pause)
+                overlay = pygame.Surface((800, 600), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 140))
+                screen.blit(overlay, (0, 0))
+
+                popup_w, popup_h = 420, 120
+                popup_x = (800 - popup_w) // 2
+                popup_y = (600 - popup_h) // 2
+                pygame.draw.rect(screen, (20, 20, 30), (popup_x, popup_y, popup_w, popup_h), border_radius=8)
+                pygame.draw.rect(screen, (120, 180, 220), (popup_x, popup_y, popup_w, popup_h), 2, border_radius=8)
+
+                title = pygame.font.Font(None, 28).render("Connected - Waiting for Host", True, (255, 255, 255))
+                screen.blit(title, (popup_x + 20, popup_y + 12))
+                msg = pygame.font.Font(None, 20).render("Please wait until the host presses START. Do not exit.", True, (200, 200, 200))
+                screen.blit(msg, (popup_x + 20, popup_y + 50))
+
+                # Cancel button inside popup (draw but actual cancel handled by main)
+                cancel_rect = pygame.Rect(popup_x + popup_w - 110, popup_y + popup_h - 38, 90, 28)
+                pygame.draw.rect(screen, (160, 40, 40), cancel_rect, border_radius=6)
+                cancel_text = pygame.font.Font(None, 20).render("CANCEL", True, (255, 255, 255))
+                screen.blit(cancel_text, (cancel_rect.x + 14, cancel_rect.y + 4))
         
         # ===== UPDATE HOVER & CURSOR =====
         mouse_pos = pygame.mouse.get_pos()
