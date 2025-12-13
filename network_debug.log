@@ -1062,3 +1062,39 @@
 2025-12-12 10:49:27,707 - Attempt 2/2 (timeout: 5s)
 2025-12-12 10:49:32,708 - \u23f3 Timeout on attempt 2: timed out
 2025-12-12 10:49:32,709 - Host not responding after 2 attempts
+2025-12-13 00:35:21,544 - \U0001f517 CONNECTING to 192.168.1.100:7777
+2025-12-13 00:35:21,547 - Attempt 1/2 (timeout: 5s)
+2025-12-13 00:35:26,548 - \u23f3 Timeout on attempt 1: timed out
+2025-12-13 00:35:28,549 - Attempt 2/2 (timeout: 5s)
+2025-12-13 00:35:33,549 - \u23f3 Timeout on attempt 2: timed out
+2025-12-13 00:35:33,549 - Host not responding after 2 attempts
+2025-12-13 11:43:15,394 - \U0001f517 CONNECTING to 192.168.1.100:7777
+2025-12-13 11:43:15,396 - Attempt 1/2 (timeout: 5s)
+2025-12-13 11:43:20,397 - \u23f3 Timeout on attempt 1: timed out
+2025-12-13 11:43:22,398 - Attempt 2/2 (timeout: 5s)
+2025-12-13 11:43:27,398 - \u23f3 Timeout on attempt 2: timed out
+2025-12-13 11:43:27,399 - Host not responding after 2 attempts
+2025-12-13 11:44:11,435 - \U0001f517 CONNECTING to 192.168.9.100:7777
+2025-12-13 11:44:11,438 - Attempt 1/2 (timeout: 3s)
+2025-12-13 11:44:14,439 - \u23f3 Timeout on attempt 1: timed out
+2025-12-13 11:44:16,440 - Attempt 2/2 (timeout: 5s)
+2025-12-13 11:44:21,442 - \u23f3 Timeout on attempt 2: timed out
+2025-12-13 11:44:21,443 - Host not responding after 2 attempts
+2025-12-13 12:15:26,338 - \U0001f517 CONNECTING to 192.168.2.000:7777
+2025-12-13 12:15:26,339 - Attempt 1/2 (timeout: 3s)
+2025-12-13 12:15:26,343 - \u274c Error on attempt 1: [Errno 11001] getaddrinfo failed
+2025-12-13 12:15:28,344 - Attempt 2/2 (timeout: 5s)
+2025-12-13 12:15:28,345 - \u274c Error on attempt 2: [Errno 11001] getaddrinfo failed
+2025-12-13 12:15:28,346 - Connection failed: [Errno 11001] getaddrinfo failed
+2025-12-13 12:15:35,012 - \U0001f517 CONNECTING to 192.168.1.0:7777
+2025-12-13 12:15:35,013 - Attempt 1/2 (timeout: 3s)
+2025-12-13 12:15:38,015 - \u23f3 Timeout on attempt 1: timed out
+2025-12-13 12:15:40,016 - Attempt 2/2 (timeout: 5s)
+2025-12-13 12:15:45,017 - \u23f3 Timeout on attempt 2: timed out
+2025-12-13 12:15:45,018 - Host not responding after 2 attempts
+2025-12-13 12:48:53,685 - \U0001f517 CONNECTING to 192.168.90.2:7777
+2025-12-13 12:48:53,686 - Attempt 1/2 (timeout: 3s)
+2025-12-13 12:48:56,686 - \u23f3 Timeout on attempt 1: timed out
+2025-12-13 12:48:58,688 - Attempt 2/2 (timeout: 5s)
+2025-12-13 12:49:03,688 - \u23f3 Timeout on attempt 2: timed out
+2025-12-13 12:49:03,689 - Host not responding after 2 attempts

@@ -19,6 +19,8 @@ class NetworkManager:
         self.error_message = ""
         self.status_message = "Not connected"
         self.zerotier_ip = self.get_zerotier_ip()
+        self.last_event = None
+        self.host_info = None
 
     logging.basicConfig(
         filename='network_debug.log',
@@ -165,29 +167,31 @@ class NetworkManager:
     def start_host(self):
         """Start as host/server"""
         try:
-            self.is_host = True
-            self.connected = False
-            self.error_message = ""
-            self.status_message = "Starting host..."
+            # PERBAIKAN: Reset dulu sebelum mulai host baru
+            self.reset_for_new_host()
             
+            # Buat socket baru
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             
-            # === TAMBAHKAN INI ===
             # Set socket options untuk firewall traversal
-            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)  # No delay
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             if hasattr(socket, 'SO_KEEPALIVE'):
                 self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             
+            # Bind ke port
             self.socket.bind(('0.0.0.0', self.port))
             self.socket.listen(1)
             self.socket.settimeout(0.5)  # Non-blocking accept
             
             self.status_message = "Host started - Waiting for connection..."
+            print(f"✅ Host started on port {self.port}")
             return True
             
         except Exception as e:
             self.error_message = f"Error starting host: {str(e)}"
+            print(f"❌ Failed to start host: {e}")
+            self.reset_connection()  # Reset jika gagal
             return False
 
     def update_host(self):
@@ -203,6 +207,9 @@ class NetworkManager:
                 
                 # PERBAIKAN: Juga update error_message agar kosong
                 self.error_message = ""
+                
+                # PERBAIKAN TAMBAHAN: Set timeout untuk mencegah blocking
+                self.client_socket.settimeout(0.1)
                 
                 # Log connection
                 print(f"✅ Host: Player connected from {addr[0]}")
@@ -244,7 +251,7 @@ class NetworkManager:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 
                 # Set timeout berdasarkan attempt
-                timeout = 5 if attempt == 0 else 5
+                timeout = 3 if attempt == 0 else 5
                 sock.settimeout(timeout)
                 
                 logging.info(f"Attempt {attempt + 1}/{max_retries} (timeout: {timeout}s)")
@@ -330,9 +337,17 @@ class NetworkManager:
                 # Format: [LENGTH(10 bytes)][DATA]
                 self.socket.sendall(f"{length:10d}".encode() + data_bytes)
                 return True
+            except socket.error as e:
+                # Hanya disconnect untuk error koneksi spesifik
+                if e.errno in [10054, 10053, 10058]:  # WSAECONNRESET, WSAECONNABORTED, WSAESHUTDOWN
+                    logging.error(f"Connection error: {e}")
+                    self.connected = False
+                else:
+                    logging.warning(f"Socket error (non-fatal): {e}")
+                return False
             except Exception as e:
                 logging.error(f"Error sending data: {e}")
-                self.connected = False
+                # Jangan langsung disconnect untuk error umum
                 return False
         return False
     
@@ -340,10 +355,39 @@ class NetworkManager:
         """Receive data dari client/host - IMPROVED"""
         if self.connected and self.socket:
             try:
-                # Receive length header
-                length_data = self.socket.recv(10)
-                if not length_data:
+                # PERBAIKAN: Check if socket is still valid
+                if not self.socket:
                     self.connected = False
+                    return None
+                
+                # Set timeout untuk non-blocking read
+                self.socket.settimeout(0.01)
+                
+                # Receive length header
+                length_data = b""
+                try:
+                    # Try to read 10 bytes for length header
+                    while len(length_data) < 10:
+                        chunk = self.socket.recv(10 - len(length_data))
+                        if not chunk:
+                            # Connection closed by peer
+                            self.connected = False
+                            return None
+                        length_data += chunk
+                except socket.timeout:
+                    # No data available yet, return None
+                    return None
+                except socket.error as e:
+                    # Handle specific socket errors gracefully
+                    if e.errno in [10035, 10054, 10053]:  # WSAEWOULDBLOCK, WSAECONNRESET, WSAECONNABORTED
+                        if e.errno == 10054:  # Connection reset by peer
+                            self.connected = False
+                        return None
+                    else:
+                        logging.warning(f"Socket error in receive_data: {e}")
+                        return None
+                
+                if not length_data:
                     return None
                 
                 try:
@@ -352,24 +396,49 @@ class NetworkManager:
                     logging.warning(f"Invalid length header: {length_data}")
                     return None
                 
-                # Receive all data (dengan retry untuk partial data)
+                # Receive all data
                 data = b""
-                while len(data) < length:
-                    chunk = self.socket.recv(min(1024, length - len(data)))
-                    if not chunk:
-                        self.connected = False
-                        return None
-                    data += chunk
+                attempts = 0
+                max_attempts = 10  # Maksimal 10x coba baca
+                
+                while len(data) < length and attempts < max_attempts:
+                    try:
+                        chunk = self.socket.recv(min(1024, length - len(data)))
+                        if not chunk:
+                            if attempts > 5:  # Setelah 5x coba tanpa data
+                                self.connected = False
+                                return None
+                            attempts += 1
+                            continue
+                        data += chunk
+                    except socket.timeout:
+                        attempts += 1
+                        continue
+                    except socket.error as e:
+                        if e.errno in [10035, 10054, 10053]:
+                            if e.errno == 10054:
+                                self.connected = False
+                            break
+                        else:
+                            logging.warning(f"Socket error reading data: {e}")
+                            attempts += 1
+                
+                if len(data) < length:
+                    return None  # Data tidak lengkap, coba lagi nanti
                 
                 return data.decode('utf-8')
-                
+                    
             except socket.timeout:
-                pass  # Normal
+                return None  # Normal, no data yet
             except BlockingIOError:
-                pass  # Data belum ready
+                return None  # Data belum ready
             except Exception as e:
                 logging.error(f"Error receiving data: {e}")
-                self.connected = False
+                # Jangan langsung disconnect untuk error kecil
+                if "10035" not in str(e) and "10054" not in str(e):
+                    # Hanya disconnect untuk error serius
+                    if "Broken pipe" in str(e) or "Connection reset" in str(e):
+                        self.connected = False
                 return None
     
     def send_player_position(self, player_id, x, y):
@@ -440,26 +509,15 @@ class NetworkManager:
         return None
 
     def disconnect(self):
-        """Disconnect from network"""
-        self.connected = False
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
-        if self.client_socket:
-            try:
-                self.client_socket.close()
-            except:
-                pass
+        """Disconnect dari jaringan - PERBAIKAN: panggil reset"""
+        print("🔌 Disconnecting from network...")
+        self.reset_connection()  # Gunakan method reset yang sudah ada
+        
+        # PERBAIKAN: Reset semua atribut dengan jelas
         self.status_message = "Disconnected"
-        
-        # PERBAIKAN: Reset last_event juga
-        if hasattr(self, 'last_event'):
-            self.last_event = None
-        
-        # PERBAIKAN: Reset error message
         self.error_message = ""
+        
+        print("✅ Disconnected successfully")
     
     def get_connection_info(self):
         """Get connection info for UI display - IMPROVED"""
@@ -520,6 +578,55 @@ class NetworkManager:
                 
         return info_lines
     
+    def reset_connection(self):
+        """Reset koneksi jaringan ke keadaan awal"""
+        print("🔄 Resetting network connection...")
+        
+        # Reset semua status
+        self.connected = False
+        self.is_host = False
+        self.status_message = "Not connected"
+        self.error_message = ""
+        
+        # Close sockets
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+        
+        if self.client_socket:
+            try:
+                self.client_socket.close()
+            except:
+                pass
+            self.client_socket = None
+        
+        # Reset last_event
+        if hasattr(self, 'last_event'):
+            self.last_event = None
+        
+        print("✅ Network connection reset")
+        return True
+    
+    def reset_for_new_host(self):
+        """Reset khusus untuk memulai sebagai host baru"""
+        print("🔄 Preparing for new host session...")
+        
+        # Reset status tapi tetap sebagai host
+        self.reset_connection()
+        self.is_host = True
+        self.connected = False
+        self.status_message = "Starting host..."
+        self.error_message = ""
+        
+        # Refresh ZeroTier IP
+        self.zerotier_ip = self.get_zerotier_ip()
+        
+        print(f"✅ Ready for new host session, IP: {self.zerotier_ip}")
+        return True
+    
     def get_error_message(self):
         """Get detailed error message for display - IMPROVED VERSION"""
         if self.error_message:
@@ -576,24 +683,28 @@ class NetworkManager:
         return None
     
     def send_event(self, event_type, payload=None):
-        """Kirim event JSON kecil ke remote (type + payload)"""
+        """Kirim event JSON kecil ke remote (type + payload) - DIPERBAIKI"""
         try:
             import json
             data = {'type': event_type, 'payload': payload or {}}
             data_str = json.dumps(data)
             
-            # PERBAIKAN: Tambahkan newline sebagai delimiter
+            # TAMBAHKAN newline sebagai delimiter
             data_str += '\n'
             
-            # Kirim dengan try-catch
+            # Kirim dengan error handling yang lebih baik
             if self.connected and self.socket:
                 self.socket.sendall(data_str.encode('utf-8'))
                 logging.debug(f"Event sent: {event_type}")
                 return True
+            else:
+                logging.warning(f"Cannot send event, not connected: {event_type}")
+                return False
+                
         except Exception as e:
             logging.error(f"send_event error: {e}")
-            self.connected = False
-        return False
+            # Jangan langsung set connected = False, biarkan method lain yang handle
+            return False
 
     def receive_event(self):
         """
@@ -608,14 +719,20 @@ class NetworkManager:
                 return None
             try:
                 parsed = json.loads(data)
-                # store last event for UI layers that inspect network_manager
                 self.last_event = parsed
+                
+                # PERBAIKAN PENTING: Selalu update host_info jika event adalah host_info
+                if parsed.get('type') == 'host_info':
+                    self.host_info = parsed.get('payload', {})
+                    print(f"📥 NetworkManager stored host_info: {self.host_info}")
+                    # Simpan juga ke log untuk debugging
+                    logging.info(f"Host info received: {self.host_info}")
+                
                 return parsed
             except Exception as e:
                 logging.warning(f"Invalid JSON event received: {e} -> {data}")
                 return None
         except Exception as e:
-            logging.error(f"receive_event error: {e}")
             return None
         
     def send_event_safe(self, event_type, payload=None):
@@ -659,3 +776,9 @@ class NetworkManager:
         except Exception as e:
             logging.error(f"receive_event_safe error: {e}")
         return None
+    
+    def reset_host_info(self):
+        """Reset host info"""
+        self.host_info = None
+        self.last_event = None
+        print("🔄 Host info reset")

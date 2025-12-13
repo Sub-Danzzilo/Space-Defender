@@ -212,57 +212,15 @@ class OnlineMenuPages:
         
         screen.blit(text_surface, (display_rect.x + 20, display_rect.y + 12))
         
-        # ===== BUTTONS SECTION =====
-        buttons_y = ip_section_y + 110
-        
-        # HAPUS TOMBOL YANG ADA SEBELUMNYA (refresh_ip dan start_online_game)
-        if 'refresh_ip' in buttons:
-            del buttons['refresh_ip']
-        if 'start_online_game' in buttons:
-            del buttons['start_online_game']
-        
-        # Tombol kiri: tergantung kondisi
-        if network_manager.connected:
-            # Jika client sudah connect, tampilkan START ONLINE GAME
-            left_button = Button(
-                50, buttons_y, 240, 50,
-                "START ONLINE GAME",
-                (0, 180, 0), (255, 255, 255),
-                font_size=24,
-                hover_color=(0, 255, 100)
-            )
-            # Simpan sebagai start_online_game untuk identifikasi
-            buttons['start_online_game'] = left_button
-        else:
-            # Jika belum connect, tampilkan REFRESH IP
-            left_button = Button(
-                50, buttons_y, 240, 50,
-                "REFRESH IP", 
-                (0, 100, 200), (255, 255, 255),
-                font_size=24,
-                hover_color=(100, 200, 255)
-            )
-            # Simpan sebagai refresh_ip untuk identifikasi
-            buttons['refresh_ip'] = left_button
-        
-        # Tombol kanan (CANCEL/BACK) - selalu ada
-        cancel_width = 200
-        cancel_x = SCREEN_WIDTH - 50 - cancel_width
-        
-        if 'cancel_host' not in buttons:
-            buttons['cancel_host'] = Button(
-                cancel_x, buttons_y, cancel_width, 50,
-                "BACK",
-                (180, 0, 0), (255, 255, 255),
-                font_size=22,
-                hover_color=(255, 100, 100)
-            )
+        # ===== TIDAK ADA KODE PEMBUATAN TOMBOL DI SINI =====
+        # Tombol sudah dibuat oleh Game.load_buttons_for_state() berdasarkan template
+        # Jangan hapus atau buat tombol di sini
         
         # ===== CLIENT CANCELLED ALERT =====
         if client_cancel_alert_time > 0:
             current_time = pygame.time.get_ticks()
             if current_time - client_cancel_alert_time < 3000:  # 3 detik
-                alert_y = buttons_y + 80
+                alert_y = 350
                 alert_rect = pygame.Rect(50, alert_y, SCREEN_WIDTH - 100, 40)
                 pygame.draw.rect(screen, (100, 20, 20, 200), alert_rect, border_radius=8)
                 pygame.draw.rect(screen, (255, 100, 100), alert_rect, 2, border_radius=8)
@@ -270,15 +228,9 @@ class OnlineMenuPages:
                 alert_text = self.small_font.render("Client cancelled connection", True, (255, 200, 200))
                 screen.blit(alert_text, (SCREEN_WIDTH//2 - alert_text.get_width()//2, alert_y + 10))
         
-        # ===== UPDATE HOVER SEBELUM MENGGAMBAR =====
-        # Harus update hover dulu agar draw() memakai state is_hovered yang up-to-date
-        mouse_pos = pygame.mouse.get_pos()
-        for btn in buttons.values():
-            btn.update_hover(mouse_pos)
-        
         # ===== STATUS SECTION =====
         # PERBAIKAN: Gunakan network_manager.connected untuk status
-        status_y = buttons_y + (130 if client_cancel_alert_time > 0 and current_time - client_cancel_alert_time < 3000 else 80)
+        status_y = 310
         
         status_rect = pygame.Rect(50, status_y, SCREEN_WIDTH - 100, 80)
         pygame.draw.rect(screen, (0, 0, 0, 180), status_rect, border_radius=10)
@@ -289,6 +241,13 @@ class OnlineMenuPages:
             status_color = (0, 255, 0)
             status_text = "PLAYER CONNECTED!"
             detail_text = "Click 'START GAME' to begin"
+            # PERBAIKAN: Tampilkan informasi tambahan
+            if hasattr(network_manager, 'client_socket'):
+                try:
+                    client_ip = network_manager.client_socket.getpeername()[0]
+                    detail_text = f"Player connected from {client_ip}"
+                except:
+                    pass
         else:
             status_color = (255, 255, 0)
             dot_count = (pygame.time.get_ticks() // 500) % 4
@@ -303,7 +262,7 @@ class OnlineMenuPages:
         screen.blit(detail, (SCREEN_WIDTH//2 - detail.get_width()//2, status_y + 50))
         
         # ===== DETAILED CONTROLS SECTION =====
-        controls_y = status_y + 100
+        controls_y = 410
         
         # Box untuk controls yang lebih besar
         controls_rect = pygame.Rect(50, controls_y, SCREEN_WIDTH - 100, 150)  # Ditinggikan
@@ -357,6 +316,12 @@ class OnlineMenuPages:
         conn_text = self.small_font.render("Both players must be in same ZeroTier network", True, (255, 255, 100))
         screen.blit(conn_text, (SCREEN_WIDTH//2 - conn_text.get_width()//2, conn_y))
         
+        # ===== UPDATE HOVER SEBELUM MENGGAMBAR =====
+        # Harus update hover dulu agar draw() memakai state is_hovered yang up-to-date
+        mouse_pos = pygame.mouse.get_pos()
+        for btn in buttons.values():
+            btn.update_hover(mouse_pos)
+        
         # ===== GAMBAR TOMBOL =====
         # PERBAIKAN: Hanya gambar tombol yang ada di buttons
         for button in buttons.values():
@@ -395,7 +360,7 @@ class OnlineMenuPages:
             screen.blit(line_surface, (popup_x + (popup_width - line_surface.get_width()) // 2, popup_y + 60 + i * 25))
         
         # Tombol Cancel dengan hover effect
-        cancel_width, cancel_height = 140, 40
+        cancel_width, cancel_height = 180, 40
         cancel_x = popup_x + (popup_width - cancel_width) // 2
         cancel_y = popup_y + popup_height - cancel_height - 20
         
@@ -617,6 +582,10 @@ class OnlineMenuPages:
             if game_instance:
                 game_instance.remote_host_info = None
             
+            # PERBAIKAN: Juga reset network_manager.host_info
+            if hasattr(network_manager, 'reset_host_info'):
+                network_manager.reset_host_info()
+            
             # Gambar teks N/A
             diff_surface = self.small_font.render("Difficulty: N/A", True, (200, 200, 200))
             screen.blit(diff_surface, (host_info_rect.x + 30, host_info_y + 45))
@@ -633,18 +602,24 @@ class OnlineMenuPages:
         
         else:
             # Kode normal untuk menampilkan host info
-            # PERBAIKAN: Prioritaskan game_instance.remote_host_info jika ada
+            # PERBAIKAN: Prioritas pengambilan host_info untuk client
             host_info = None
-            if game_instance and hasattr(game_instance, 'remote_host_info') and game_instance.remote_host_info:
+            # PRIORITAS 1: Gunakan network_manager.host_info
+            if hasattr(network_manager, 'host_info') and network_manager.host_info:
+                host_info = network_manager.host_info
+                print(f"📊 Using host_info from network_manager: {host_info.get('difficulty', 'N/A')}")
+            # PRIORITAS 2: Gunakan game_instance.remote_host_info
+            elif game_instance and hasattr(game_instance, 'remote_host_info') and game_instance.remote_host_info:
                 host_info = game_instance.remote_host_info
-                print(f"📊 Using host_info from game_instance: {host_info.get('difficulty')}")
+                # Simpan juga ke network_manager untuk konsistensi
+                if hasattr(network_manager, 'host_info'):
+                    network_manager.host_info = host_info
+                print(f"📊 Using host_info from game_instance: {host_info.get('difficulty', 'N/A')}")
+            # PRIORITAS 3: Gunakan last_event
             elif hasattr(network_manager, 'last_event') and isinstance(network_manager.last_event, dict):
                 if network_manager.last_event.get('type') == 'host_info':
                     host_info = network_manager.last_event.get('payload', {})
-                    # Simpan juga di instance untuk referensi
-                    if game_instance:
-                        game_instance.remote_host_info = host_info
-                    print(f"📊 Using host_info from network_manager: {host_info.get('difficulty')}")
+                    print(f"📊 Using host_info from last_event: {host_info.get('difficulty', 'N/A')}")
             
             # PERBAIKAN: Jika connected tapi host_info masih None, coba request
             if network_manager.connected and not host_info and game_instance:
@@ -723,10 +698,17 @@ class OnlineMenuPages:
         
         # ===== UPDATE HOVER & CURSOR =====
         mouse_pos = pygame.mouse.get_pos()
-        if 'connect_to_host' in buttons:
-            buttons['connect_to_host'].update_hover(mouse_pos)
-        if 'cancel_join' in buttons:
-            buttons['cancel_join'].update_hover(mouse_pos)
+        
+        # PERBAIKAN: Jangan update hover jika popup aktif
+        popup_active = False
+        if game_instance and hasattr(game_instance, 'client_waiting_popup'):
+            popup_active = game_instance.client_waiting_popup
+        
+        if not popup_active:
+            if 'connect_to_host' in buttons:
+                buttons['connect_to_host'].update_hover(mouse_pos)
+            if 'cancel_join' in buttons:
+                buttons['cancel_join'].update_hover(mouse_pos)
         
         # Cursor blink
         if self.input_active:

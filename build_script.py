@@ -84,7 +84,7 @@ def build_exe():
         "--exclude-module=_tkinter",
         
         # Koleksi untuk pygame
-        "--collect-all=pygame",
+        "--collect-all=pygame"
     ]
     
     # UPX untuk kompresi
@@ -101,9 +101,11 @@ def build_exe():
     
     # Hidden imports
     hidden_imports = [
+        "json", 
         "pygame", "pygame._view", "pygame.mixer", "pygame.mixer_music",
         "socket", "threading", "json", "logging", "platform", "subprocess",
         "random", "math", "sys", "os", "time", "re", "traceback",
+        "enum"
     ]
     
     # Tambahkan psutil hanya kalau terinstall (optional)

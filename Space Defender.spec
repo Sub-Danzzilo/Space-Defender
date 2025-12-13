@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('assets', 'assets')]
 binaries = []
-hiddenimports = ['pygame', 'pygame._view', 'pygame.mixer', 'pygame.mixer_music', 'socket', 'threading', 'json', 'logging', 'platform', 'subprocess', 'random', 'math', 'sys', 'os', 'time', 're', 'traceback', 'psutil', 'psutil']
+hiddenimports = ['json', 'pygame', 'pygame._view', 'pygame.mixer', 'pygame.mixer_music', 'socket', 'threading', 'json', 'logging', 'platform', 'subprocess', 'random', 'math', 'sys', 'os', 'time', 're', 'traceback', 'enum', 'psutil', 'psutil']
 tmp_ret = collect_all('pygame')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
