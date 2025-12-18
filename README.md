@@ -35,7 +35,7 @@
 ### 🎯 Game Modes
 
 | Mode | Deskripsi |
-|------|-----------|
+| ------ | ----------- |
 | **Singleplayer** | Bermain sendiri melawan gelombang musuh yang terus bertambah kuat |
 | **Local Multiplayer** | Dua pemain di satu komputer dengan kontrol yang berbeda |
 | **Online Multiplayer** | Bermain dengan teman melalui jaringan ZeroTier dengan koneksi real-time |
@@ -43,7 +43,7 @@
 ### 📊 Difficulty Levels
 
 | Level | Kesulitan | Cocok Untuk |
-|-------|-----------|------------|
+| ------- | ----------- | ------------ |
 | **Easy** | ⭐ | Pemula - musuh lebih lambat, pemain punya health lebih banyak |
 | **Normal** | ⭐⭐ | Pemain Biasa - tingkat kesulitan standar yang seimbang |
 | **Hard** | ⭐⭐⭐ | Pemain Berpengalaman - musuh lebih kuat dan cepat |
@@ -52,7 +52,7 @@
 ### 👾 Enemy Types (12+ Varian)
 
 | Tipe | Karakteristik | Strategi |
-|------|--------------|----------|
+| ------ | -------------- | ---------- |
 | **Normal** | Musuh standar, gerak lurus | Mudah dihindari |
 | **Fast** | Bergerak sangat cepat | Antisipasi jauh-jauh hari |
 | **Bouncer** | Memantul kiri-kanan | Tembak di titik balik |
@@ -69,7 +69,7 @@
 ### 🎁 Power-Up System (7 Jenis)
 
 | Power-Up | Efek | Durasi |
-|----------|------|--------|
+| ---------- | ------ | -------- |
 | ⚡ **Rapid Fire** | Menembak 2x lebih cepat | 10 detik |
 | 🐢 **Slow Enemies** | Memperlambat semua musuh 50% | 8 detik |
 | 🌀 **Multiple Bullets** | Menembak 3 peluru sekaligus | 12 detik |
@@ -141,7 +141,7 @@ Space Defender/
 ### Kontrol Singleplayer
 
 | Aksi | Tombol |
-|------|--------|
+| ------ | -------- |
 | **Bergerak Atas** | W |
 | **Bergerak Kiri** | A |
 | **Bergerak Bawah** | S |
@@ -153,7 +153,7 @@ Space Defender/
 ### Kontrol Local Multiplayer
 
 | Aksi | Player 1 | Player 2 |
-|------|----------|----------|
+| ------ | ---------- | ---------- |
 | **Atas** | W | ↑ |
 | **Kiri** | A | ← |
 | **Bawah** | S | ↓ |
@@ -164,7 +164,7 @@ Space Defender/
 ### Kontrol Umum (Semua Mode)
 
 | Aksi | Tombol |
-|------|--------|
+| ------ | -------- |
 | **Navigasi Menu** | Mouse / Arrow Keys |
 | **Klik Tombol** | Mouse / ENTER |
 | **Scroll Menu** | Mouse Wheel / PgUp/PgDn |
@@ -322,7 +322,7 @@ sudo ufw status
 ### Scoring System
 
 | Aksi | Poin | Catatan |
-|------|------|---------|
+| ------ | ------ | --------- |
 | **Normal Enemy** | 10 | Dasar |
 | **Fast Enemy** | 15 | Lebih sulit |
 | **Bouncer/Spiral** | 15 | Pattern complex |
@@ -380,7 +380,7 @@ Wave 11+:   Semua tipe musuh bisa muncul
 ### System Requirements
 
 | Komponen | Minimal | Recommended |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | **OS** | Windows 7+ / macOS 10.12+ / Linux | Windows 10+ / macOS 10.15+ / Linux Modern |
 | **Python** | 3.8 | 3.10+ |
 | **RAM** | 256 MB | 512 MB |
@@ -524,7 +524,7 @@ Kombinasi Terbaik:
 #### **Survival Tactics**
 
 | Situasi | Taktik |
-|---------|--------|
+| --------- | -------- |
 | **Banyak musuh cluster** | Ambil Multiple Bullets, gerak ke edge layar |
 | **Kamikaze incoming** | Gerak unpredictable, gunakan Slow Enemies |
 | **HP kritis** | Ambil Health atau Invincibility jika available |
@@ -534,7 +534,7 @@ Kombinasi Terbaik:
 #### **Enemy-Specific Counter-Play**
 
 | Tipe Musuh | Counter-Strategy |
-|-----------|-----------------|
+| ----------- | ----------------- |
 | **Normal/Fast** | Dodge dan tembak terus |
 | **Bouncer** | Tembak saat di titik balik gerak |
 | **Red Shooter** | Keep distance, dorong ke edge, tembak full |
@@ -747,7 +747,7 @@ Ingin ide fitur baru? Silakan share:
 ## 🔄 Version History
 
 | Versi | Tanggal | Perubahan |
-|-------|---------|----------|
+| ------- | --------- | ---------- |
 | **Alpha v1** | 27 November 2025 | Initial Release |
 | | | • 2+ enemy types |
 | | | • 7+ powerup |
